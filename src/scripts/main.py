@@ -102,10 +102,10 @@ class image_converter:
         print(deg)
         if deg > 1:
             self.twist.linear.x = 0.0
-            self.twist.angular.z = -1.1
+            self.twist.angular.z = -1.0
         elif deg < -1:
             self.twist.linear.x = 0.0
-            self.twist.angular.z = 1.1
+            self.twist.angular.z = 1.0
         else:
             self.twist.linear.x = 0.0
             self.twist.angular.z = 0.0
@@ -173,7 +173,7 @@ class image_converter:
     img_aug = np.expand_dims(img, axis=0)
     # input_data = np.expand_dims(np.array(img_aug, dtype=np.float32), axis=-1)
     input_data = np.array(img_aug, dtype=np.float32)
-    interpreter = tf.lite.Interpreter(model_path="/home/fizzer/ros_ws/src/controller_pkg/data/model_100_quantized.tflite")
+    interpreter = tf.lite.Interpreter(model_path="/home/fizzer/ros_ws/src/controller_pkg/data/model_200_quantized.tflite")
     interpreter.allocate_tensors()
 
     # Set the input tensor.
@@ -253,7 +253,7 @@ class image_converter:
     
     areas = self.check_crosswalk_dist(cv_image)
     if len(areas) > 1:
-      if areas[0] > 5000 and areas[1] > 200 and time.time() - self.start_time > 5:
+      if areas[0] > 5000 and areas[1] > 200:
         # self.align_robot(cv_image)
         
         self.twist.linear.x = 0.0
@@ -286,7 +286,7 @@ class image_converter:
       self.cmd_vel_pub.publish(self.twist)
     else:
       next_prob = pred_arr[0][1]
-      p_scaled = min(-0.125/(next_prob - 1.0001), 1.0)
+      p_scaled = min(-0.125/(next_prob - 1.0001), 1.0) #originallly 0.125
       prev_speed = self.twist.linear.x
       if (pred == 0):
         self.twist.linear.x = 0.09

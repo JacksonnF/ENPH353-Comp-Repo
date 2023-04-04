@@ -456,12 +456,6 @@ def on_press(key):
         for arr in collected_plates_arr:
             predictedPlate = predictPlate(arr)
             print("predictedPlate: ", predictedPlate)
-            
-
-    
-
-
-
 
 if __name__ == '__main__':
     time.sleep(1)
