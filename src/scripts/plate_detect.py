@@ -40,14 +40,10 @@ def hsvImage(img):
     eroded1 = cv2.erode(mask, kernel1, iterations=erodeIterations)
     eroded2 = cv2.erode(mask2, kernel1, iterations=erodeIterations)
     eroded3 = cv2.erode(mask3, kernel1, iterations=erodeIterations)
-
     
     # Combine the HSV masks into a single mask
     combinedResult1 = cv2.bitwise_or(eroded1, eroded2)
     combinedResult2 = cv2.bitwise_or(combinedResult1, eroded3)
-
-    # cv2.imshow("eroded_combined", combinedResult2)
-    # cv2.waitKey(1)
 
     # Dilate Horizontally
     kernel3 = np.ones((1,2), np.uint8)
@@ -59,25 +55,10 @@ def hsvImage(img):
     kernel2 = np.ones((5,1), np.uint8)
     dilatedVertically  = cv2.dilate(dilatedHorizontally,kernel2, iterations=15)
 
-    # cv2.imshow("dilated", dilatedVertically)
-    # cv2.waitKey(1)
-
+    #Erode again
     finalEroded = cv2.erode(dilatedVertically,kernel2, iterations=15)
 
-    # cv2.imshow("finalEroded", finalEroded)
-    # cv2.waitKey(1)
-
-
     blurred = cv2.GaussianBlur(finalEroded, (5,5), 0)
-
-    # cv2.imshow("blurred", blurred)
-    # cv2.waitKey(1)
-
-    # # Threshold the smoothed image to get the final binary image
-    # _, final_binary_image = cv2.threshold(blurred, 127, 255, cv2.THRESH_BINARY)
-
-    # cv2.imshow("final_binary_image", final_binary_image)
-    # cv2.waitKey(1)
 
     return blurred
 
@@ -183,10 +164,6 @@ def hsvLetters(img):
     kernel1 = np.ones((2,2), np.uint8)
     eroded1 = cv2.erode(mask, kernel1, iterations=erodeIterations)
     
-    # cv2.imshow("eroded_combined_letters", eroded1)
-    # cv2.waitKey(1)
-
-    
     blurred = cv2.GaussianBlur(eroded1, (3,3), 0)
 
     return blurred
@@ -225,7 +202,6 @@ def find_letter_corners(contours):
         all_points = contours[0]
     else: return None, None, None, None
     
-    
     # Find the minimum area rectangle for the concatenated points
     min_area_rect = cv2.minAreaRect(all_points)
     
@@ -260,7 +236,6 @@ def find_letter_corners2(contours):
     bottom_left = (x, y + h)
     top_right = (x + w, y)
     bottom_right = (x + w, y + h)
-
 
     return np.array([top_left, bottom_left, top_right, bottom_right], dtype="int")
    
@@ -325,8 +300,6 @@ def isolatePlate(img):
         # print("sucessful: ", sucessful)
         return None
     
-
-    
     topLeft, topRight, bottomLeft, bottomRight = find_outermost_points_combined(filtered_contours)
 
     inwardShift = 1
@@ -347,7 +320,6 @@ def isolatePlate(img):
         # print("sucessful_letters: ", sucessful_letters)
         return None
     topLeft2, topRight2, bottomRight2, bottomLeft2 = find_letter_corners(filtered_contours_letters)
-
 
     if(topLeft2==None):
         return None
@@ -371,12 +343,10 @@ def isolatePlate(img):
     
     success4, rectangles = find_individual_letter_corners(filtered_contours_letters_individual)
 
-
     # print("rectangles: ", len(rectangles))
 
     adjustedRectangles = splitRectangles(rectangles)
     # print("adjustedRectangles: ", len(adjustedRectangles))
-
     
     if(success4 == True):
         croppedLetters_individual = [None, None, None, None]
@@ -464,11 +434,6 @@ def on_press(key):
             cv2.imwrite(filename, current_croppedLetters_individual[i])
             rospy.loginfo("Saved image {}".format(filename))
             count = count+1
-
-    
-
-
-
 
 if __name__ == '__main__':
     time.sleep(1)
