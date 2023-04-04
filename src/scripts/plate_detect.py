@@ -19,6 +19,8 @@ import csv
 
 from pynput import keyboard
 
+collected_plates_arr = []
+
 def hsvImage(img):
     # Convert BGR to HSV color space
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
@@ -407,14 +409,7 @@ def callback(data):
     temp = isolatePlate(current_frame)
     if(temp is not None and temp[0] is not None and temp[1] is not None and temp[2] is not None and temp[3] is not None):
         current_croppedLetters_individual = temp
-        predictedPlate = predictPlate(current_croppedLetters_individual)
-        
-        font = cv2.FONT_HERSHEY_SIMPLEX
-        fontScale = 10
-        color = (0, 0, 255) # BGR color format
-        thickness = 5
-
-        print("predictedPlate: ", predictedPlate)
+        collected_plates_arr.append(current_croppedLetters_individual)
 
 
 def on_press(key):
@@ -427,13 +422,11 @@ def on_press(key):
 
     if 1 <= key_num <= 6:
         print('You pressed {}'.format(key_num))
-        # Save the image with the specified file name
-        for i in range(0,4):
-            time.sleep(0.2)
-            filename = "./data/"+licensePlateList[key_num-1][i+2]+"-{}-{}.jpg".format(count, session)
-            cv2.imwrite(filename, current_croppedLetters_individual[i])
-            rospy.loginfo("Saved image {}".format(filename))
-            count = count+1
+        global collected_plates_arr
+        for arr in collected_plates_arr:
+            predictedPlate = predictPlate(arr)
+            print("predictedPlate: ", predictedPlate)
+            
 
 if __name__ == '__main__':
     time.sleep(1)

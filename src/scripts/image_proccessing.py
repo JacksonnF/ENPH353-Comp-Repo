@@ -33,10 +33,12 @@ class image_converter:
     filtered = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     mask = cv2.inRange(filtered, np.array([0, 50, 50]), np.array([10, 255, 255]))
     contours, hierarchy = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE) 
-    area = cv2.contourArea(contours[0])
-    print(area)
-    if area > 20000:
-        self.state = 1
+    if len(contours) > 1:
+      area1 = cv2.contourArea(contours[0])
+      area2 = cv2.contourArea(contours[1])
+      print("area1: ", area1)
+      print("area2: ", area2)
+      
 
 
   def align_robot(self, img):
@@ -88,83 +90,8 @@ class image_converter:
     except CvBridgeError as e:
       print(e)
 
-    if self.state == 0:
-        self.check_crosswalk_dist(cv_image)
-    if self.state == 1:
-       self.align_robot(cv_image)
-    if self.state == 2:
-       filtered = cv2.cvtColor(cv_image, cv2.COLOR_BGR2HSV)
-       mask = cv2.inRange(filtered, np.array([0, 0, 100]), np.array([1, 1, 140]))
-       self.prev_frame = self.current_frame
-       self.current_frame = mask
-       self.look_for_ped()
-
-
-    # gray = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
-    # blur = cv2.GaussianBlur(gray, (5, 5), 0)
-    # ret, bin_img = cv2.threshold(blur, 180,255,0)
-    # edges = cv2.Canny(bin_img, 50, 150)
-    # w = gray.shape[1]
-    # h = gray.shape[0]
-
-    # # cropped_edges = edges[int(h-210):h, 0:w]
-    # min_line_length = 100
-    # max_line_gap = 80
-    # rho = 1
-    # theta = np.pi / 180
-    # threshold = 185
-
-    # cropped_img = cv_image[int(h-210):h, 0:w]
-    # cropped_edges = edges[int(h-210):h, 0:w]
-    # lines = cv2.HoughLinesP(cropped_edges, rho, theta, threshold, np.array([]), min_line_length, max_line_gap)
-
-
-   
-
-    # filtered = cv2.cvtColor(cv_image, cv2.COLOR_BGR2HSV)
-    # # mask = cv2.inRange(filtered, np.array([0, 50, 50]), np.array([10, 255, 255]))   #red
-    # mask = cv2.inRange(filtered, np.array([0, 0, 100]), np.array([179, 10, 255]))
-    # contours, hierarchy = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE) 
-    # # drawn = cv2.drawContours(cv_image, contours, -1, (0, 255, 0), 3)
-
-    # self.prev_frame = self.current_frame
-    # self.current_frame = mask
-
-    # print(np.mean(cv2.absdiff(self.current_frame, self.prev_frame))**2)
-
-    # if (np.mean(cv2.absdiff(self.current_frame, self.prev_frame))**2 > 1.0):
-    #    print("go")
-    # edges = cv2.Canny(mask, 50, 150)
-
-    # lines = cv2.HoughLinesP(edges, rho, theta, threshold, np.array([]), min_line_length, max_line_gap)
-    # if lines is not None:
-    #     for line in lines:
-    #         x1, y1, x2, y2 = line[0]
-    #         cv2.line(cv_image, (x1, y1), (x2, y2), (0, 0, 255), 2)
+    self.check_crosswalk_dist(cv_image)
     
-    # if lines is not None:
-    #     x1, y1, x2, y2 = lines[0][0]
-    #     deg = np.rad2deg(np.arctan((y2-y1)/(x2-x1)))
-    #     print(deg)
-    #     if not self.aligned:
-    #         if deg > 5:
-    #             self.twist.angular.z = -0.5
-    #         elif deg < -5:
-    #             self.twist.angular.z = 0.5
-    #         else:
-    #             self.twist.angular.z = 0.0
-    #             print("aligned")
-    #             self.aligned = True
-    
-    # self.cmd_vel_pub.publish(self.twist)
-    #print(cv2.contourArea(contours[0]))
-    
-    
-
-    # try:
-    #   self.image_pub.publish(self.bridge.cv2_to_imgmsg(cv_image, "bgr8"))
-    # except CvBridgeError as e:
-    #   print(e)
 
 
 def main():
