@@ -53,6 +53,11 @@ class image_converter:
     self.stop_at_crosswalk = False
     self.area_seen_twice = 0
     self.start_time = time.time()
+    self.been_on_sand = 0
+    self.loop_count = 0
+    self.enter_inner_loop = False
+    self.align_cross_inner = False
+    self.inner_manuever = False
     
 
     listener = keyboard.Listener(
@@ -96,8 +101,15 @@ class image_converter:
     lines = cv2.HoughLinesP(edges, rho, theta, threshold, np.array([]), 
                             min_line_length, max_line_gap)
     
+    next_line = None
     if lines is not None:
-        x1, y1, x2, y2 = lines[0][0]
+        for line in lines:
+          x1, y1, x2, y2 = line[0]
+          slope = (y2-y1)/(x2-x1)
+          if slope < 5:
+            next_line = line
+        # x1, y1, x2, y2 = lines[0][0]
+        x1, y1, x2, y2 = next_line[0]
         deg = np.rad2deg(np.arctan((y2-y1)/(x2-x1)))
         print(deg)
         if deg > 1:
@@ -117,12 +129,18 @@ class image_converter:
           self.stop_at_crosswalk = False
           self.aligned = 0
           self.num_of_crosswalks += 1
+          if self.align_cross_inner:
+            self.align_cross_inner = False
+            self.inner_manuever = True
           #  self.predict_sand(bottom_half_rgb)
         
     if lines is None:
       print('no lines found')
       self.waiting += 1
       if self.waiting > 3:
+        if self.align_cross_inner:
+          self.align_cross_inner = False
+          self.inner_manuever = True
         self.waiting_to_cross = True
         self.stop_at_crosswalk = False
         self.aligned = 0
@@ -206,6 +224,20 @@ class image_converter:
       resized_img_gray = cv2.resize(gray, dim, interpolation=cv2.INTER_AREA)
       ret, bin_img = cv2.threshold(resized_img_gray[int(h/2):h, 0:w], 180,255,0)
       return bin_img
+    
+  def check_for_sand_end(self, img):
+    w = img.shape[1]
+    h = img.shape[0]
+    cropped_img = img[h-240:h, 0:w]
+    blur = cv2.GaussianBlur(cropped_img, (5, 5), 0)
+    filtered = cv2.cvtColor(blur, cv2.COLOR_BGR2HSV)
+    mask = cv2.inRange(filtered, np.array([0, 0, 75]), np.array([5, 5, 90]))
+    contours, hierarchy = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    if len(contours) > 0:
+      area1 = cv2.contourArea(contours[0])
+      return area1
+    else:
+      return 0
 
   
   def callback(self,data):
@@ -221,6 +253,15 @@ class image_converter:
     except CvBridgeError as e:
       print(e)
 
+    if self.enter_inner_loop:
+      if self.align_cross_inner:
+        self.align_robot(cv_image)
+        return
+      if self.inner_manuever:
+        self.inner_manuever_func()
+        return
+      return
+    
     if self.stop_at_crosswalk:
       self.align_robot(cv_image)
       return
@@ -259,15 +300,34 @@ class image_converter:
         self.twist.linear.x = 0.0
         self.twist.angular.z = 0.0
         self.cmd_vel_pub.publish(self.twist)
-        self.stop_at_crosswalk = True
-        self.area_seen_twice = 0
+        if self.loop_count > 0:
+          self.enter_inner_loop = True
+          self.align_cross_inner = True
+          return
+        else:
+          self.stop_at_crosswalk = True
+          self.area_seen_twice = 0
         # self.waiting_to_cross = True
+        return
+
+    #Check if sand has ended
+    if self.num_of_crosswalks > 1:
+      road_area = self.check_for_sand_end(cv_image)
+      if road_area > 25000 and self.been_on_sand > 25:
+        self.twist.linear.x = 0.0
+        self.twist.angular.z = 0.0
+        self.cmd_vel_pub.publish(self.twist)
+        print('sand ended')
+        self.num_of_crosswalks = 0
+        self.been_on_sand = 0
+        self.loop_count += 1
         return
 
     
     if self.num_of_crosswalks > 1:
       bottom_half_rgb = self.crop_for_prediction(cv_image, True)
       pred_arr = self.predict_sand(bottom_half_rgb)
+      self.been_on_sand += 1
     else:
       bin_img = self.crop_for_prediction(cv_image, False)
       pred_arr = self.predict(bin_img)
@@ -413,6 +473,26 @@ class image_converter:
     time.sleep(2)
     self.finished_manuever = True
     self.start = False
+
+  def inner_manuever_func(self):
+    time.sleep(1)    
+    self.twist.linear.x = -0.5
+    self.twist.angular.z = 0.0
+    self.cmd_vel_pub.publish(self.twist)
+    time.sleep(0.49)
+    self.twist.linear.x = 0.0
+    self.twist.angular.z = 1.0
+    self.cmd_vel_pub.publish(self.twist)
+    time.sleep(2.1)
+    self.twist.linear.x = 0.35
+    self.twist.angular.z = 0.0
+    self.cmd_vel_pub.publish(self.twist)
+    time.sleep(0.5)
+    self.twist.linear.x = 0.0
+    self.twist.angular.z = 0.0
+    self.cmd_vel_pub.publish(self.twist)
+
+    self.inner_manuever = False
     
 def on_press(key):
     global end_global

@@ -90,7 +90,38 @@ class image_converter:
     except CvBridgeError as e:
       print(e)
 
-    self.check_crosswalk_dist(cv_image)
+    min_line_length = 100
+    max_line_gap = 80
+    rho = 1
+    theta = np.pi / 180
+    threshold = 185
+
+
+    w = cv_image.shape[1]
+    h = cv_image.shape[0]
+
+    cropped_img = cv_image[h-240:h, 0:w]
+
+    blur = cv2.GaussianBlur(cropped_img, (5, 5), 0)
+    filtered = cv2.cvtColor(blur, cv2.COLOR_BGR2HSV)
+    mask = cv2.inRange(filtered, np.array([0, 0, 75]), np.array([5, 5, 90]))
+    edges = cv2.Canny(mask, 50, 150)
+
+    lines = cv2.HoughLinesP(edges, rho, theta, threshold, np.array([]), 
+                            min_line_length, max_line_gap)
+    contours, hierarchy = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    area1 = cv2.contourArea(contours[0])
+    print(area1)
+    #draw contours on cropped image
+    cv2.drawContours(cropped_img, contours, -1, (0, 255, 0), 3)
+    if lines is not None:
+      for line in lines:
+        x1, y1, x2, y2 = line[0]
+        slope = (y2-y1)/(x2-x1)
+        # if abs(slope) < 0.5:
+          # cv2.line(cropped_img, (x1, y1), (x2, y2), (0, 0, 255), 2)
+    cv2.imshow("image", cropped_img)
+    cv2.waitKey(3)
     
 
 
