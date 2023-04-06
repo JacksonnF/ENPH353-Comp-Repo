@@ -6,6 +6,7 @@ from geometry_msgs.msg import Pose, Quaternion
 import numpy as np
 import time
 from tensorflow import keras
+from ordered_set import OrderedSet
 
 import cv2
 from cv_bridge import CvBridge, CvBridgeError
@@ -301,7 +302,7 @@ def isolatePlate(img):
     
     if(sucessful==False):
         # print("sucessful: ", sucessful)
-        return None
+        return None, False
     
     topLeft, topRight, bottomLeft, bottomRight = find_outermost_points_combined(filtered_contours)
 
@@ -313,19 +314,22 @@ def isolatePlate(img):
     croppedImage = crop_and_transform(img, topLeft, bottomLeft, topRight, bottomRight)
     # cv2.imshow("PlateCrop", croppedImage)
     # cv2.waitKey(1)
-
     # ------------------------------------------------------------
 
     # Isolate Plate Letters
     isolatedLetters = hsvLetters(croppedImage)
     plateHsv2, filtered_contours_letters, sucessful_letters = letter_contours(isolatedLetters)
+    print("sucessful_letters: ", sucessful_letters)
     if(sucessful_letters==False):
         # print("sucessful_letters: ", sucessful_letters)
-        return None
+        return None, False
     topLeft2, topRight2, bottomRight2, bottomLeft2 = find_letter_corners(filtered_contours_letters)
 
+    print("topLeft2: ", topLeft2)
+
     if(topLeft2==None):
-        return None
+        print("None returned")
+        return None, False
     
     outwardShift = 1
     topLeft2 = (topLeft2[0] - outwardShift, topLeft2[1] - outwardShift)
@@ -335,30 +339,39 @@ def isolatePlate(img):
 
     croppedLetters = crop_and_transform(isolatedLetters, topLeft2, bottomLeft2, topRight2, bottomRight2, height=40, width=200)
 
+
+    return croppedLetters, True
+
+
+def isolatePlate2(croppedLetters):
+
     # ------------------------------------------------------------
 
     # Crop individual letters
 
     plateHsv3, filtered_contours_letters_individual , sucessful_letters3 = letter_contours(croppedLetters)
-    binaryImage0 = np.zeros((croppedLetters.shape[0], croppedLetters.shape[1], 3), np.uint8)
-    binaryImage = np.zeros((croppedLetters.shape[0], croppedLetters.shape[1], 3), np.uint8)
-    binaryImage2 = np.zeros((croppedLetters.shape[0], croppedLetters.shape[1], 3), np.uint8)
+    # binaryImage0 = np.zeros((croppedLetters.shape[0], croppedLetters.shape[1], 3), np.uint8)
+    # binaryImage = np.zeros((croppedLetters.shape[0], croppedLetters.shape[1], 3), np.uint8)
+    # binaryImage2 = np.zeros((croppedLetters.shape[0], croppedLetters.shape[1], 3), np.uint8)
     
     success4, rectangles = find_individual_letter_corners(filtered_contours_letters_individual)
 
     # print("rectangles: ", len(rectangles))
 
     adjustedRectangles = splitRectangles(rectangles)
+    if(len(adjustedRectangles)!=4):
+        return None
     # print("adjustedRectangles: ", len(adjustedRectangles))
     
     if(success4 == True):
         croppedLetters_individual = [None, None, None, None]
         for i in range(0,len(rectangles)):
             croppedLetters_individual[i] = crop_and_transform(croppedLetters, adjustedRectangles[i][0], adjustedRectangles[i][1], adjustedRectangles[i][2], adjustedRectangles[i][3], height=40, width=32)
+            if(type(croppedLetters_individual)==type(None)):
+                return None
     else:
         # print("success4: ",  success4)
         croppedLetters_individual = None
-
 
     return croppedLetters_individual
 
@@ -395,10 +408,17 @@ def predictPlate(cropped_letters):
 
 
 def callback(data):
+    # print("Callback")
     global carNumber
     global current_frame
     global current_croppedLetters_individual
     global count
+    global queue1
+    global queue2
+    global processedPlateStrings
+    global skipIsolations
+    global plateCounts
+    global plateSet
     try:
         # Convert ROS Image message to OpenCV image
         cv_image = bridge.imgmsg_to_cv2(data, "bgr8")
@@ -408,23 +428,38 @@ def callback(data):
     # Store current frame
     current_frame = cv_image
 
-    temp = isolatePlate(current_frame)
-    if(temp is not None and temp[0] is not None and temp[1] is not None and temp[2] is not None and temp[3] is not None):
-        current_croppedLetters_individual = temp
-        collected_plates_arr.append(current_croppedLetters_individual)
-        # print(carNumber)
-        # print(licensePlateList[carNumber-1])
-        # for i in range(0,4):
-        #     filename = "./data/"+licensePlateList[carNumber-1][i+2]+"-{}-{}.jpg".format(count, session)
-        #     cv2.imwrite(filename, current_croppedLetters_individual[i])
-        #     rospy.loginfo("Saved image {}".format(filename))
-        #     count = count+1
 
+    if(skipIsolation == False):
+        output1, successful = isolatePlate(current_frame)
+        if(successful==True):
+            print("step1")
+            queue1.put(output1)
+            return
+        
+        if(not queue1.empty()):
+            print("step2")
+            output2 = isolatePlate2(queue1.get())
+            if(output2!=None):
+                queue2.put(output2)
+            return
+        
+        if(not queue2.empty()):
+            print("step3")
+            output3 = predictPlate(queue2.get())
+            plateSet.add(output3)
+            if(output3 in plateCounts):
+                plateCounts[output3] += 1
+            else:
+                plateCounts[output3] = 1
+            return
+        
+    
 
 def on_press(key):
     global count
     global session
     global carNumber
+    global skipIsolation
     try:
         key_num = int(key.char)
     except (AttributeError, ValueError):
@@ -432,10 +467,12 @@ def on_press(key):
 
     if 7 <= key_num <= 8:
         print('You pressed {}'.format(key_num))
-        global collected_plates_arr
-        for arr in collected_plates_arr:
-            predictedPlate = predictPlate(arr)
-            print("predictedPlate: ", predictedPlate)
+        skipIsolation = True
+        for plate in plateSet:
+            if(plateCounts[plate] > 1):
+                processedPlateStrings.append(plate)   
+        for plate in processedPlateStrings:
+            print(plate)
 
     if 1 <= key_num <= 6:
         print('You pressed {}'.format(key_num))
@@ -446,9 +483,23 @@ def on_press(key):
             
 
 if __name__ == '__main__':
+    import queue
     global carNumber
     carNumber = 1
     global session
+    global queue1
+    global queue2
+    global processedPlateStrings
+    global skipIsolation
+    skipIsolation = False
+    global plateCounts
+    global plateSet
+    plateSet =  OrderedSet([])
+    plateCounts = {}
+
+    processedPlateStrings = []
+    queue1 = queue.Queue()
+    queue2 = queue.Queue()
 
     time.sleep(1)
     rospy.init_node('image_isolator')
@@ -458,7 +509,7 @@ if __name__ == '__main__':
     letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
     numbers = "0123456789"
     letModel = keras.models.load_model("/home/fizzer/ros_ws/src/controller_pkg/data/let_model_4.h5")
-    numModel = keras.models.load_model("/home/fizzer/ros_ws/src/controller_pkg/data/num_model_4.h5")
+    numModel = keras.models.load_model("/home/fizzer/ros_ws/src/controller_pkg/data/num_model_3.h5")
     # Open the CSV file
     with open('/home/fizzer/ros_ws/src/2022_competition/enph353/enph353_gazebo/scripts/plates.csv', newline='') as csvfile:
         # Create a CSV reader object
