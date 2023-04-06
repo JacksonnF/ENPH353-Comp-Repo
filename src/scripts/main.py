@@ -61,6 +61,11 @@ class image_converter:
     self.inner_manuever = False
     
 
+
+    # Stuff for pedestrian routine
+    self.lastCentroid = (None,None)
+    self.lastPedestrianSpeed = None
+
     listener = keyboard.Listener(
     on_press=on_press,
     on_release=on_release)
@@ -154,7 +159,9 @@ class image_converter:
 
   def check_crosswalk_dist(self, img):
     filtered = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-    mask = cv2.inRange(filtered, np.array([0, 50, 50]), np.array([10, 255, 255]))
+    mask = cv2.inRange(filtered, np.array([0, 52, 128]), np.array([0, 255, 255]))
+    eroded = cv2.erode(mask, np.ones((2, 2), np.uint8), iterations=1)
+    dilated = cv2.dilate(eroded, np.ones((3, 3), np.uint8), iterations=3)
     contours, hierarchy = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE) 
     if len(contours) > 1:
       area1 = cv2.contourArea(contours[0])
@@ -241,6 +248,55 @@ class image_converter:
       return area1
     else:
       return 0
+  def hsv_pedestrian(self, img):
+    # Convert BGR to HSV color space
+    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+
+    # Apply the HSV filter
+    mask = cv2.inRange(hsv, np.array([92,106,43]), np.array([106,151,52]))
+
+     # Erode the masks to remove noise
+    dilateIterations3 = 5
+    kernel3 = np.ones((2,2), np.uint8)
+    dilated3 = cv2.dilate(mask, kernel3, iterations=dilateIterations3)
+
+
+    dilateIterations2 = 5
+    kernel2 = np.ones((1,1), np.uint8)
+    dilated2 = cv2.dilate(dilated3, kernel2, iterations=dilateIterations2)
+
+    blurred = cv2.GaussianBlur(dilated2, (5,5), 0)
+
+    return blurred
+  
+  def contour_pedestrian(self, img):
+    # Find the contours in the thresholded image
+    contours, hierarchy = cv2.findContours(img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    # Aproximate the contours
+    approx_contours = []
+    for cnt in contours:
+        approx = cv2.approxPolyDP(cnt, 0.001 * cv2.arcLength(cnt, True), True)
+        approx_contours.append(approx)
+
+    if(len(approx_contours)>0):
+        currentMaxArea = 0
+        index = 0
+        for i in range(0,len(approx_contours)):
+            currentArea = cv2.contourArea(approx_contours[i])
+            if(currentArea>currentMaxArea):
+                index = i
+                currentMaxArea = currentArea
+
+    return [approx_contours[index]]
+  
+  def find_contour_centroid(self, contour):
+    M = cv2.moments(contour)
+    cx = int(M['m10']/M['m00'])
+    cy = int(M['m01']/M['m00'])
+    return [cx, cy]
+
+       
 
   
   def callback(self,data):
@@ -272,16 +328,39 @@ class image_converter:
       return
        
     if self.waiting_to_cross:
-      print('waiting to cross')
+      print('cross')
       #  gray = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
       #  print(np.mean(self.prev_img - gray)**2)
       #  self.prev_img = gray
-      self.i += 1
-      if self.i > 25:
-        self.waiting_to_cross = False
-        self.crossing = True
-        self.i = 0
-    
+      hsvPedestrian = self.hsv_pedestrian(cv_image)
+      contours = self.contour_pedestrian(hsvPedestrian)
+      centroid = self.find_contour_centroid(contours[0])
+
+      #Last centroid initialized but lastSpeed is not
+      if(self.lastPedestrianSpeed==None and self.lastCentroid!=(None,None)):
+        self.lastPedestrianSpeed = centroid[0]-self.lastCentroid[0]
+        return
+
+      #Last Centroid not initialized but lastSpeed is
+      if(self.lastCentroid==(None,None)):
+        self.lastCentroid = centroid
+        return
+      else:
+        #Last centroid and last speed initialized
+        currentPedestrianSpeed = centroid[0] - self.lastCentroid[0]
+
+      print("current speed: ", currentPedestrianSpeed)
+      print("last speed: ", self.lastPedestrianSpeed)
+
+      if(np.abs(self.lastPedestrianSpeed)- np.abs(currentPedestrianSpeed)>10 and np.abs(currentPedestrianSpeed)<np.abs(self.lastPedestrianSpeed)):
+          self.waiting_to_cross = False
+          self.crossing = True
+          self.lastCentroid = (None,None)
+          self.lastPedestrianSpeed = None
+      else:
+        self.lastCentroid = centroid      
+        self.lastPedestrianSpeed = currentPedestrianSpeed   
+
       return
     
     #drive forward until both crosswalks are out of view
@@ -318,7 +397,8 @@ class image_converter:
     
     areas = self.check_crosswalk_dist(cv_image)
     if len(areas) > 1:
-      if areas[0] > 5000 and areas[1] > 200 and time.time() - self.start_time > 10:
+      print(areas)
+      if areas[0] > 5000 and areas[1]>75 and time.time()-self.start_time>5:
         # self.align_robot(cv_image)
         
         self.twist.linear.x = 0.0
