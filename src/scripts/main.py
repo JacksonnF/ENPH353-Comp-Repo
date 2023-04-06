@@ -31,6 +31,7 @@ class image_converter:
     self.twist = Twist()
     self.twist.linear.x = 0.0
     self.twist.angular.z = 0.0
+    
 
     self.start = True
     self.end = False
@@ -114,10 +115,10 @@ class image_converter:
         print(deg)
         if deg > 1:
             self.twist.linear.x = 0.0
-            self.twist.angular.z = -1.0
+            self.twist.angular.z = -0.6
         elif deg < -1:
             self.twist.linear.x = 0.0
-            self.twist.angular.z = 1.0
+            self.twist.angular.z = 0.6
         else:
             self.twist.linear.x = 0.0
             self.twist.angular.z = 0.0
@@ -168,9 +169,11 @@ class image_converter:
     img_aug = np.expand_dims(img, axis=0)
     input_data = np.expand_dims(np.array(img_aug, dtype=np.float32), axis=-1)
     # input_data = np.array(img_aug, dtype=np.float32)
+    start = time.time() * 1000
     interpreter = tf.lite.Interpreter(model_path="/home/fizzer/ros_ws/src/controller_pkg/data/model_3000c_quantized.tflite")
     interpreter.allocate_tensors()
-
+    # print(time.time() * 1000 - start)
+    # print(start)
     # Set the input tensor.
     input_index = interpreter.get_input_details()[0]["index"]
     interpreter.set_tensor(input_index, input_data)
@@ -181,7 +184,7 @@ class image_converter:
   # Get the output tensor.
     output_index = interpreter.get_output_details()[0]["index"]
     output_data = interpreter.get_tensor(output_index)
-
+    # print(time.time() * 1000 - start)
     # Print the predicted class.
     predicted_class = np.argmax(output_data)
     # print(predicted_class)
@@ -191,7 +194,7 @@ class image_converter:
     img_aug = np.expand_dims(img, axis=0)
     # input_data = np.expand_dims(np.array(img_aug, dtype=np.float32), axis=-1)
     input_data = np.array(img_aug, dtype=np.float32)
-    interpreter = tf.lite.Interpreter(model_path="/home/fizzer/ros_ws/src/controller_pkg/data/model_200_quantized.tflite")
+    interpreter = tf.lite.Interpreter(model_path="/home/fizzer/ros_ws/src/controller_pkg/data/model_400aa_quantized.tflite")
     interpreter.allocate_tensors()
 
     # Set the input tensor.
@@ -242,9 +245,10 @@ class image_converter:
   
   def callback(self,data):
     if self.start:
-      self.license_plate_pub.publish(str('TeamRed,multi12,0,XR58'))
       self.spawn_position(-0.85, 0 , 0.5, 0,0,1,0)
       self.initial_turn()
+      print('here')
+      self.license_plate_pub.publish(str('TeamRed,multi12,0,XR58'))
       self.start = False
       cv_image = self.bridge.imgmsg_to_cv2(data, "bgr8")
       self.prev_img = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
@@ -259,6 +263,7 @@ class image_converter:
         return
       if self.inner_manuever:
         self.inner_manuever_func()
+        self.license_plate_pub.publish(str('TeamRed,multi12,-1,XR58'))
         return
       return
     
@@ -286,20 +291,42 @@ class image_converter:
       if contours[0] < 150 and contours[1] < 150:
         self.crossing = False
       else:
-        self.twist.linear.x = 0.3
-        self.twist.angular.z = 0.0
+        # ####
+        # self.twist.linear.x = 0.3
+        # self.twist.angular.z = 0.0
+        # self.cmd_vel_pub.publish(self.twist)
+        # time.sleep(1.2)
+        # ####
+        bin_img = self.crop_for_prediction(cv_image, False)
+        pred_arr = self.predict(bin_img)
+        pred = np.argmax(pred_arr)
+        next_prob = pred_arr[0][1]
+        p_scaled = min(-0.125/(next_prob - 1.0001), 1.0) #originallly 0.125
+        prev_speed = self.twist.linear.x
+        if (pred == 0):
+          self.twist.linear.x = 0.1
+          self.twist.angular.z = 1.2 #1.3 good before
+        elif (pred == 1):
+          self.twist.linear.x = min(prev_speed + 0.1, p_scaled) #0.6 normally
+          self.twist.angular.z = 0.0
+        elif (pred == 2):
+          self.twist.linear.x = 0.1
+          self.twist.angular.z = -1.2
         self.cmd_vel_pub.publish(self.twist)
       return
 
     
     areas = self.check_crosswalk_dist(cv_image)
     if len(areas) > 1:
-      if areas[0] > 5000 and areas[1] > 200:
+      if areas[0] > 5000 and areas[1] > 200 and time.time() - self.start_time > 10:
         # self.align_robot(cv_image)
         
         self.twist.linear.x = 0.0
         self.twist.angular.z = 0.0
         self.cmd_vel_pub.publish(self.twist)
+        self.stop_at_crosswalk = True
+          
+        self.area_seen_twice = 0
         if self.loop_count > 0:
           self.enter_inner_loop = True
           self.align_cross_inner = True
@@ -313,7 +340,7 @@ class image_converter:
     #Check if sand has ended
     if self.num_of_crosswalks > 1:
       road_area = self.check_for_sand_end(cv_image)
-      if road_area > 25000 and self.been_on_sand > 25:
+      if road_area > 80000 and self.been_on_sand > 25:
         self.twist.linear.x = 0.0
         self.twist.angular.z = 0.0
         self.cmd_vel_pub.publish(self.twist)
@@ -333,15 +360,29 @@ class image_converter:
       pred_arr = self.predict(bin_img)
     pred = np.argmax(pred_arr)
     if self.num_of_crosswalks > 1:
+      # if (pred == 0):
+      #   self.twist.linear.x = 0.1
+      #   self.twist.angular.z = 1.2
+      # elif (pred == 1):
+      #   self.twist.linear.x = 0.5
+      #   self.twist.angular.z = 0.0
+      # elif (pred == 2):
+      #   self.twist.linear.x = 0.1
+      #   self.twist.angular.z = -1.2
+      next_prob = pred_arr[0][1]
+      p_scaled = min(-0.125/(next_prob - 1.0001), 0.8) #originallly 0.125
+      prev_speed = self.twist.linear.x
       if (pred == 0):
-        self.twist.linear.x = 0.0
-        self.twist.angular.z = 1.1
+        self.twist.linear.x = 0.1
+        self.twist.angular.z = 1.3 #1.3 good before
       elif (pred == 1):
-        self.twist.linear.x = 0.365
+        self.twist.linear.x = min(prev_speed + 0.1, p_scaled) #0.6 normally
         self.twist.angular.z = 0.0
+        # self.twist.linear.x = 1.0
       elif (pred == 2):
-        self.twist.linear.x = 0.0
-        self.twist.angular.z = -1.1
+        self.twist.linear.x = 0.1
+        self.twist.angular.z = -1.3
+
 
       self.cmd_vel_pub.publish(self.twist)
     else:
@@ -349,13 +390,14 @@ class image_converter:
       p_scaled = min(-0.125/(next_prob - 1.0001), 1.0) #originallly 0.125
       prev_speed = self.twist.linear.x
       if (pred == 0):
-        self.twist.linear.x = 0.09
+        self.twist.linear.x = 0.1
         self.twist.angular.z = 1.3 #1.3 good before
       elif (pred == 1):
         self.twist.linear.x = min(prev_speed + 0.1, p_scaled) #0.6 normally
         self.twist.angular.z = 0.0
+        # self.twist.linear.x = 1.0
       elif (pred == 2):
-        self.twist.linear.x = 0.09
+        self.twist.linear.x = 0.1
         self.twist.angular.z = -1.3
 
       self.cmd_vel_pub.publish(self.twist)    
@@ -457,25 +499,24 @@ class image_converter:
         
 
   def initial_turn(self):
-    
-    time.sleep(1)    
+    time.sleep(1.0)
     self.twist.linear.x = 0.5
     self.twist.angular.z = 0.0
     self.cmd_vel_pub.publish(self.twist)
     time.sleep(0.75)
     self.twist.linear.x = 0.0
-    self.twist.angular.z = 1.0
+    self.twist.angular.z = 1.5
     self.cmd_vel_pub.publish(self.twist)
-    time.sleep(2.1)
+    time.sleep(1.5)
     self.twist.linear.x = 0.0
     self.twist.angular.z = 0.0
     self.cmd_vel_pub.publish(self.twist)
-    time.sleep(2)
+    # time.sleep(2)
     self.finished_manuever = True
     self.start = False
 
   def inner_manuever_func(self):
-    time.sleep(1)    
+    # time.sleep(1)    
     self.twist.linear.x = -0.5
     self.twist.angular.z = 0.0
     self.cmd_vel_pub.publish(self.twist)
@@ -487,7 +528,7 @@ class image_converter:
     self.twist.linear.x = 0.35
     self.twist.angular.z = 0.0
     self.cmd_vel_pub.publish(self.twist)
-    time.sleep(0.5)
+    time.sleep(0.7)
     self.twist.linear.x = 0.0
     self.twist.angular.z = 0.0
     self.cmd_vel_pub.publish(self.twist)

@@ -6,6 +6,8 @@ import cv2
 from sensor_msgs.msg import Image
 import numpy as np
 import time
+import conv_net
+import torch
 
 class image_converter:
 
@@ -27,6 +29,9 @@ class image_converter:
     self.ped_seen_count = 0
     self.state = 0
     
+    self.model = conv_net.ConvNet()
+    self.model.load_state_dict(torch.load("/home/fizzer/ros_ws/src/controller_pkg/data/model_2_pytorch.pth", map_location=torch.device('cpu')))
+    self.model.eval()
 
 
   def check_crosswalk_dist(self, img):
@@ -89,40 +94,36 @@ class image_converter:
       cv_image = self.bridge.imgmsg_to_cv2(data, "bgr8")
     except CvBridgeError as e:
       print(e)
-
-    min_line_length = 100
-    max_line_gap = 80
-    rho = 1
-    theta = np.pi / 180
-    threshold = 185
-
-
-    w = cv_image.shape[1]
-    h = cv_image.shape[0]
-
-    cropped_img = cv_image[h-240:h, 0:w]
-
-    blur = cv2.GaussianBlur(cropped_img, (5, 5), 0)
-    filtered = cv2.cvtColor(blur, cv2.COLOR_BGR2HSV)
-    mask = cv2.inRange(filtered, np.array([0, 0, 75]), np.array([5, 5, 90]))
-    edges = cv2.Canny(mask, 50, 150)
-
-    lines = cv2.HoughLinesP(edges, rho, theta, threshold, np.array([]), 
-                            min_line_length, max_line_gap)
-    contours, hierarchy = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-    area1 = cv2.contourArea(contours[0])
-    print(area1)
-    #draw contours on cropped image
-    cv2.drawContours(cropped_img, contours, -1, (0, 255, 0), 3)
-    if lines is not None:
-      for line in lines:
-        x1, y1, x2, y2 = line[0]
-        slope = (y2-y1)/(x2-x1)
-        # if abs(slope) < 0.5:
-          # cv2.line(cropped_img, (x1, y1), (x2, y2), (0, 0, 255), 2)
-    cv2.imshow("image", cropped_img)
+    
+    print(self.predict_pytorch(cv_image))
+ 
+    cv2.imshow("image", cv_image)
     cv2.waitKey(3)
     
+  def predict_pytorch(self, img):
+    scale_percent = 20
+    w = int(img.shape[1] * scale_percent / 100)
+    h = int(img.shape[0] * scale_percent / 100)
+    dim = (w, h)
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    resized_img_gray = cv2.resize(gray, dim, interpolation=cv2.INTER_AREA)
+    ret, bin_img = cv2.threshold(resized_img_gray[int(h/2):h, 0:w], 180,255,0)
+    bin_img = [bin_img]
+    img_data = np.array(bin_img)
+    image_data = img_data.reshape(-1, 1, img_data.shape[1], img_data.shape[2])
+
+    # Convert the data type to float32 and normalize the pixel values to [0, 1]
+    image_data = image_data.astype('float32') / 255.0
+
+    # Convert the array to a PyTorch tensor
+    image_tensor = torch.from_numpy(image_data)
+    start_time = time.time()
+    
+    with torch.no_grad():
+      outputs = self.model(image_tensor)
+    
+    print(time.time() - start_time)
+    return outputs
 
 
 def main():

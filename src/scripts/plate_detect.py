@@ -98,7 +98,7 @@ def contours(thresh_img):
         approx = cv2.approxPolyDP(cnt, 0.001 * cv2.arcLength(cnt, True), True)
         approx_contours.append(approx)
 
-    filtered_contours = [c for c in approx_contours if cv2.contourArea(c) > 10000]
+    filtered_contours = [c for c in approx_contours if cv2.contourArea(c) > 8000]
 
     if(len(filtered_contours)>0):
         # Finds the largest and second largest contours by area
@@ -465,8 +465,8 @@ if __name__ == '__main__':
 
     letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
     numbers = "0123456789"
-    letModel = keras.models.load_model("/home/fizzer/ros_ws/src/controller_pkg/data/let_model_1.h5")
-    numModel = keras.models.load_model("/home/fizzer/ros_ws/src/controller_pkg/data/num_model_1.h5")
+    letModel = keras.models.load_model("/home/fizzer/ros_ws/src/controller_pkg/data/let_model_4.h5")
+    numModel = keras.models.load_model("/home/fizzer/ros_ws/src/controller_pkg/data/num_model_3.h5")
     # Open the CSV file
     with open('/home/fizzer/ros_ws/src/2022_competition/enph353/enph353_gazebo/scripts/plates.csv', newline='') as csvfile:
         # Create a CSV reader object
