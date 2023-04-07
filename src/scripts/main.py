@@ -201,7 +201,7 @@ class image_converter:
     img_aug = np.expand_dims(img, axis=0)
     # input_data = np.expand_dims(np.array(img_aug, dtype=np.float32), axis=-1)
     input_data = np.array(img_aug, dtype=np.float32)
-    interpreter = tf.lite.Interpreter(model_path="/home/fizzer/ros_ws/src/controller_pkg/data/model_400aa_quantized.tflite")
+    interpreter = tf.lite.Interpreter(model_path="/home/fizzer/ros_ws/src/controller_pkg/data/model_400aa_quantized.tflite") #400aa best so far
     interpreter.allocate_tensors()
 
     # Set the input tensor.
@@ -367,14 +367,15 @@ class image_converter:
     if self.crossing:
       print('crossing')
       contours = self.check_crosswalk_dist(cv_image)
+      print(contours)
       if contours[0] < 150 and contours[1] < 150:
         self.crossing = False
       else:
         # ####
-        # self.twist.linear.x = 0.3
+        # self.twist.linear.x = 0.5
         # self.twist.angular.z = 0.0
         # self.cmd_vel_pub.publish(self.twist)
-        # time.sleep(1.2)
+        
         # ####
         bin_img = self.crop_for_prediction(cv_image, False)
         pred_arr = self.predict(bin_img)
