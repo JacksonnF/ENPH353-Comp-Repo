@@ -5,8 +5,10 @@ from gazebo_msgs.msg import ModelState
 from geometry_msgs.msg import Pose, Quaternion
 import numpy as np
 import time
-from tensorflow import keras
+import tensorflow as tf
 from ordered_set import OrderedSet
+from geometry_msgs.msg import Twist
+
 
 import cv2
 from cv_bridge import CvBridge, CvBridgeError
@@ -319,16 +321,16 @@ def isolatePlate(img):
     # Isolate Plate Letters
     isolatedLetters = hsvLetters(croppedImage)
     plateHsv2, filtered_contours_letters, sucessful_letters = letter_contours(isolatedLetters)
-    print("sucessful_letters: ", sucessful_letters)
+    # print("sucessful_letters: ", sucessful_letters)
     if(sucessful_letters==False):
         # print("sucessful_letters: ", sucessful_letters)
         return None, False
     topLeft2, topRight2, bottomRight2, bottomLeft2 = find_letter_corners(filtered_contours_letters)
 
-    print("topLeft2: ", topLeft2)
+    # print("topLeft2: ", topLeft2)
 
     if(topLeft2==None):
-        print("None returned")
+        # print("None returned")
         return None, False
     
     outwardShift = 1
@@ -379,18 +381,52 @@ def predictLetter(croppedLetter, boolean):
 
     # print(boolean)
 
-    predictedArray = letModel.predict(np.expand_dims(croppedLetter, axis=0))
-    predictedLetter = letters[np.argmax(predictedArray)]
+    # predictedArray = letModel.predict(np.expand_dims(croppedLetter, axis=0))
+    # predictedLetter = letters[np.argmax(predictedArray)]
+    img_aug = np.expand_dims(croppedLetter, axis=0)
+    input_data = np.expand_dims(np.array(img_aug, dtype=np.float32), axis=-1)
+
+    interpreter = tf.lite.Interpreter('/home/fizzer/ros_ws/src/controller_pkg/data/let_model_4_quantized.tflite')
+    interpreter.allocate_tensors()
+
+    # Set the input tensor.
+    input_index = interpreter.get_input_details()[0]["index"]
+    interpreter.set_tensor(input_index, input_data)
+
+    # Run inference.
+    interpreter.invoke()
+
+# Get the output tensor.
+    output_index = interpreter.get_output_details()[0]["index"]
+    output_data = interpreter.get_tensor(output_index)
     
-    return predictedLetter
+    return letters[np.argmax(output_data)]
 
 def predictNumber(croppedNumber, boolean):
     # print(boolean)
 
-    predictedArray = numModel.predict(np.expand_dims(croppedNumber, axis=0))
-    predictedNumber = numbers[np.argmax(predictedArray)]
-    
-    return predictedNumber
+    # predictedArray = numModel.predict(np.expand_dims(croppedNumber, axis=0))
+    # predictedNumber = numbers[np.argmax(predictedArray)]
+    img_aug = np.expand_dims(croppedNumber, axis=0)
+    input_data = np.expand_dims(np.array(img_aug, dtype=np.float32), axis=-1)
+
+    interpreter = tf.lite.Interpreter('/home/fizzer/ros_ws/src/controller_pkg/data/num_model_3_quantized.tflite')
+    interpreter.allocate_tensors()
+
+    # Set the input tensor.
+    start_time = time.time() * 1000
+    input_index = interpreter.get_input_details()[0]["index"]
+    interpreter.set_tensor(input_index, input_data)
+
+    # Run inference.
+    interpreter.invoke()
+
+# Get the output tensor.
+    output_index = interpreter.get_output_details()[0]["index"]
+    output_data = interpreter.get_tensor(output_index)
+    print(time.time() * 1000 - start_time)
+
+    return numbers[np.argmax(output_data)]
 
 
 def predictPlate(cropped_letters):
@@ -432,19 +468,20 @@ def callback(data):
     if(skipIsolation == False):
         output1, successful = isolatePlate(current_frame)
         if(successful==True):
-            print("step1")
+            # print("step1")
             queue1.put(output1)
             return
         
         if(not queue1.empty()):
-            print("step2")
+            # print("step2")
             output2 = isolatePlate2(queue1.get())
             if(output2!=None):
                 queue2.put(output2)
             return
-        
+        global current_vel
+        global start_time
         if(not queue2.empty()):
-            print("step3")
+            # print("step3")
             output3 = predictPlate(queue2.get())
             plateSet.add(output3)
             if(output3 in plateCounts):
@@ -472,15 +509,14 @@ def on_press(key):
             if(plateCounts[plate] > 1):
                 processedPlateStrings.append(plate)   
         for plate in processedPlateStrings:
-            print(plate)
+            print(plate + ": " + str(plateCounts[plate]))
 
     if 1 <= key_num <= 6:
         print('You pressed {}'.format(key_num))
         # Save the image with the specified file name
         carNumber += 1
         print("carNumber: ", carNumber)
-        
-            
+             
 
 if __name__ == '__main__':
     import queue
@@ -504,12 +540,13 @@ if __name__ == '__main__':
     time.sleep(1)
     rospy.init_node('image_isolator')
     image_sub = rospy.Subscriber('/R1/pi_camera/image_raw', Image, callback)
+
     licensePlateList = []
 
     letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
     numbers = "0123456789"
-    letModel = keras.models.load_model("/home/fizzer/ros_ws/src/controller_pkg/data/let_model_4.h5")
-    numModel = keras.models.load_model("/home/fizzer/ros_ws/src/controller_pkg/data/num_model_3.h5")
+    # letModel = keras.models.load_model("/home/fizzer/ros_ws/src/controller_pkg/data/let_model_4_quantized.tflite")
+    # numModel = keras.models.load_model("/home/fizzer/ros_ws/src/controller_pkg/data/num_model_3_quantized.tflite")
     # Open the CSV file
     with open('/home/fizzer/ros_ws/src/2022_competition/enph353/enph353_gazebo/scripts/plates.csv', newline='') as csvfile:
         # Create a CSV reader object
@@ -518,26 +555,6 @@ if __name__ == '__main__':
         for row in reader:
             licensePlateList.append(str(row))
     print(licensePlateList)
-
-    import csv
-
-    # Open the CSV file
-    with open('/home/fizzer/ros_ws/src/controller_pkg/data/session.csv', newline='') as csvfile:
-        # Create a CSV reader object
-        reader = csv.reader(csvfile)
-        # Read the single row
-        row = next(reader)
-        # Get the single element
-        session = row[0]
-        # Increment the number by 1
-        new_element = str(int(session) + 1)
-
-    # Open the CSV file for writing
-    with open('/home/fizzer/ros_ws/src/controller_pkg/data/session.csv', 'w', newline='') as csvfile:
-        # Create a CSV writer object
-        writer = csv.writer(csvfile)
-        # Write the updated element to the CSV file
-        writer.writerow([new_element])
         
 
     # Setup the key listener

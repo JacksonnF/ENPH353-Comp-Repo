@@ -117,7 +117,7 @@ class image_converter:
         # x1, y1, x2, y2 = lines[0][0]
         x1, y1, x2, y2 = next_line[0]
         deg = np.rad2deg(np.arctan((y2-y1)/(x2-x1)))
-        print(deg)
+        # print(deg)
         if deg > 1:
             self.twist.linear.x = 0.0
             self.twist.angular.z = -0.6
@@ -349,8 +349,8 @@ class image_converter:
         #Last centroid and last speed initialized
         currentPedestrianSpeed = centroid[0] - self.lastCentroid[0]
 
-      print("current speed: ", currentPedestrianSpeed)
-      print("last speed: ", self.lastPedestrianSpeed)
+      # print("current speed: ", currentPedestrianSpeed)
+      # print("last speed: ", self.lastPedestrianSpeed)
 
       if(np.abs(self.lastPedestrianSpeed)- np.abs(currentPedestrianSpeed)>10 and np.abs(currentPedestrianSpeed)<np.abs(self.lastPedestrianSpeed)):
           self.waiting_to_cross = False
@@ -397,7 +397,7 @@ class image_converter:
     
     areas = self.check_crosswalk_dist(cv_image)
     if len(areas) > 1:
-      print(areas)
+      # print(areas)
       if areas[0] > 5000 and areas[1]>75 and time.time()-self.start_time>5:
         # self.align_robot(cv_image)
         
