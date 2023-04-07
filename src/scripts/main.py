@@ -260,7 +260,6 @@ class image_converter:
     cx = int(M['m10']/M['m00'])
     cy = int(M['m01']/M['m00'])
     return [cx, cy]
-
        
 
   
@@ -306,7 +305,7 @@ class image_converter:
       print("current speed: ", currentPedestrianSpeed)
       print("last speed: ", self.lastPedestrianSpeed)
 
-      if(np.abs(self.lastPedestrianSpeed)- np.abs(currentPedestrianSpeed)>10 and np.abs(currentPedestrianSpeed)<np.abs(self.lastPedestrianSpeed)):
+      if(620<centroid[0] and centroid[0]<660):
           self.waiting_to_cross = False
           self.crossing = True
           self.lastCentroid = (None,None)
@@ -366,7 +365,7 @@ class image_converter:
       self.cmd_vel_pub.publish(self.twist)
     else:
       next_prob = pred_arr[0][1]
-      p_scaled = min(-0.125/(next_prob - 1.0001), 1.0)
+      p_scaled = min(-0.125/(next_prob - 1.0001),1.0)
       prev_speed = self.twist.linear.x
       if (pred == 0):
         self.twist.linear.x = 0.09
