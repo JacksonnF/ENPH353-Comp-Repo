@@ -6,21 +6,16 @@ from geometry_msgs.msg import Pose, Quaternion
 import numpy as np
 import time
 import tensorflow as tf
+from tensorflow import keras
 from ordered_set import OrderedSet
-from geometry_msgs.msg import Twist
-
-
 import cv2
 from cv_bridge import CvBridge, CvBridgeError
 from sensor_msgs.msg import Image
-
 import subprocess
-
 import roslaunch
-
 import csv
-
 from pynput import keyboard
+import collections
 
 collected_plates_arr = []
 
@@ -226,7 +221,7 @@ def find_letter_corners(contours):
     topLeft, bottomLeft = top_corners
     topRight, bottomRight = bottom_corners
 
-    if(5<topLeft[0]<35  and 340<topRight[0]<370):
+    if(1<topLeft[0]<39 and 340<topRight[0]<370):
         return (tuple(topLeft), tuple(bottomLeft), tuple(topRight), tuple(bottomRight))
     else:
         return None, None, None, None
@@ -290,6 +285,54 @@ def splitRectangles(rectangles):
             i += 1
     return rectangles
 
+def carNumberHsv(img):
+    # Convert the image to HSV
+    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    
+    # Define the lower and upper bounds of the color
+    lower = np.array([0, 0, 0])
+    upper = np.array([0, 0, 85])
+    
+    # Create a mask for the color
+    mask = cv2.inRange(hsv, lower, upper)
+
+    eroded = cv2.erode(mask, np.array([2,2]), iterations=2)
+    
+    return eroded
+
+def find_letter_corners_carNumber(contours):
+    # Concatenate all contours into a single array
+    if(len(contours)>1):
+        all_points = np.vstack(contours)
+    elif(len(contours)==1):
+        all_points = contours[0]
+    else: return None, None, None, None
+    
+    # Find the minimum area rectangle for the concatenated points
+    min_area_rect = cv2.minAreaRect(all_points)
+    
+    # Convert min_area_rect to a box with 4 vertices
+    box = cv2.boxPoints(min_area_rect)
+    box = np.int0(box)
+
+    # Sort corners by their y-coordinate
+    sorted_corners = sorted(box, key=lambda corner: corner[1])
+    
+    # Separate the corners into top and bottom pairs
+    top_corners = sorted(sorted_corners[:2], key=lambda corner: corner[0])
+    bottom_corners = sorted(sorted_corners[2:], key=lambda corner: corner[0], reverse=True)
+    
+    # Combine the corners in the desired order
+    topLeft, bottomLeft = top_corners
+    topRight, bottomRight = bottom_corners
+
+    # if(1<topLeft[0]<39 and 340<topRight[0]<370):
+    #     return (tuple(topLeft), tuple(bottomLeft), tuple(topRight), tuple(bottomRight))
+    # else:
+    #     return None, None, None, None
+
+    return (tuple(topLeft), tuple(bottomLeft), tuple(topRight), tuple(bottomRight))
+
 
 
 bridge = CvBridge()
@@ -304,7 +347,7 @@ def isolatePlate(img):
     
     if(sucessful==False):
         # print("sucessful: ", sucessful)
-        return None, False
+        return None,None, False
     
     topLeft, topRight, bottomLeft, bottomRight = find_outermost_points_combined(filtered_contours)
 
@@ -318,20 +361,55 @@ def isolatePlate(img):
     # cv2.waitKey(1)
     # ------------------------------------------------------------
 
-    # Isolate Plate Letters
+    #Isolate Car Number --------------------------------------
+
+    isolatedCarNumber = carNumberHsv(croppedImage)
+    # cv2.imshow("CarNumber", isolatedCarNumber)
+    # cv2.waitKey(1)
+
+    plateHsv3, filtered_contours_letters3, sucessful_letters3 = letter_contours(isolatedCarNumber)
+
+    if(sucessful_letters3==False):
+        # print("sucessful_letters: n ", sucessful_letters)
+        return None, None, False
+    topLeft3, topRight3, bottomRight3, bottomLeft3 = find_letter_corners_carNumber(filtered_contours_letters3)
+
+    if(topLeft3==None):
+        # print("None returned")
+        return None, None, False
+    
+    outwardShift3 = 1
+    topLeft3 = (topLeft3[0] - outwardShift3, topLeft3[1] - outwardShift3)
+    topRight3 = (topRight3[0] + outwardShift3, topRight3[1] - outwardShift3)
+    bottomLeft3 = (bottomLeft3[0] - outwardShift3, bottomLeft3[1] + outwardShift3)
+    bottomRight3 = (bottomRight3[0] + outwardShift3, bottomRight3[1] + outwardShift3)
+
+    croppedLetters3 = crop_and_transform(isolatedCarNumber, topLeft3, bottomLeft3, topRight3, bottomRight3, height = 40, width = 200)
+
+    # # Draw circles at topLeft3, topRight3, bottomLeft3, and bottomRight3 on img
+    # cv2.circle(croppedImage, topLeft3, 5, (0, 0, 255), -1)
+    # cv2.circle(croppedImage, topRight3, 5, (0, 0, 255), -1)
+    # cv2.circle(croppedImage, bottomLeft3, 5, (0, 0, 255), -1)
+    # cv2.circle(croppedImage, bottomRight3, 5, (0, 0, 255), -1)
+
+    # cv2.imshow("circle", croppedImage)
+    # cv2.waitKey(1)
+
+
+    # Isolate Plate Letters -----------------------------------------
     isolatedLetters = hsvLetters(croppedImage)
     plateHsv2, filtered_contours_letters, sucessful_letters = letter_contours(isolatedLetters)
     # print("sucessful_letters: ", sucessful_letters)
     if(sucessful_letters==False):
         # print("sucessful_letters: ", sucessful_letters)
-        return None, False
+        return None, None, False
     topLeft2, topRight2, bottomRight2, bottomLeft2 = find_letter_corners(filtered_contours_letters)
 
-    # print("topLeft2: ", topLeft2)
+    # # print("topLeft2: ", topLeft2)
 
     if(topLeft2==None):
-        # print("None returned")
-        return None, False
+        # # print("None returned")
+        return None, None, False
     
     outwardShift = 1
     topLeft2 = (topLeft2[0] - outwardShift, topLeft2[1] - outwardShift)
@@ -342,7 +420,7 @@ def isolatePlate(img):
     croppedLetters = crop_and_transform(isolatedLetters, topLeft2, bottomLeft2, topRight2, bottomRight2, height=40, width=200)
 
 
-    return croppedLetters, True
+    return croppedLetters, croppedLetters3, True
 
 
 def isolatePlate2(croppedLetters):
@@ -377,7 +455,42 @@ def isolatePlate2(croppedLetters):
 
     return croppedLetters_individual
 
-def predictLetter(croppedLetter, boolean):
+def isolatePlate2_carNumber(croppedLetters):
+
+    # ------------------------------------------------------------
+
+    # Crop individual letters
+
+    plateHsv3, filtered_contours_letters_individual , sucessful_letters3 = letter_contours(croppedLetters)
+    # binaryImage0 = np.zeros((croppedLetters.shape[0], croppedLetters.shape[1], 3), np.uint8)
+    # binaryImage = np.zeros((croppedLetters.shape[0], croppedLetters.shape[1], 3), np.uint8)
+    # binaryImage2 = np.zeros((croppedLetters.shape[0], croppedLetters.shape[1], 3), np.uint8)
+    
+    success4, rectangles = find_individual_letter_corners(filtered_contours_letters_individual)
+
+    # print("rectangles: ", len(rectangles))
+
+    # adjustedRectangles = splitRectangles(rectangles)
+    if(len(rectangles)!=2):
+        return None
+    # print("adjustedRectangles: ", len(adjustedRectangles))
+
+    adjustedRectangles = rectangles
+    
+    if(success4 == True):
+        croppedNumber = crop_and_transform(croppedLetters, adjustedRectangles[1][0], adjustedRectangles[1][1], adjustedRectangles[1][2], adjustedRectangles[1][3], height=40, width=32)
+        # croppedLetters_individual = [None, None, None, None]
+        # for i in range(0,len(rectangles)):
+        #     croppedLetters_individual[i] = crop_and_transform(croppedLetters, adjustedRectangles[i][0], adjustedRectangles[i][1], adjustedRectangles[i][2], adjustedRectangles[i][3], height=40, width=32)
+        #     if(type(croppedLetters_individual)==type(None)):
+        #         return None
+    else:
+        # print("success4: ",  success4)
+        croppedNumber = None
+
+    return croppedNumber
+
+def predictLetter(croppedLetter):
 
     # print(boolean)
 
@@ -414,7 +527,6 @@ def predictNumber(croppedNumber, boolean):
     interpreter.allocate_tensors()
 
     # Set the input tensor.
-    start_time = time.time() * 1000
     input_index = interpreter.get_input_details()[0]["index"]
     interpreter.set_tensor(input_index, input_data)
 
@@ -424,23 +536,31 @@ def predictNumber(croppedNumber, boolean):
 # Get the output tensor.
     output_index = interpreter.get_output_details()[0]["index"]
     output_data = interpreter.get_tensor(output_index)
-    print(time.time() * 1000 - start_time)
-
+    
     return numbers[np.argmax(output_data)]
+
+def predictCarNumber(croppedNumber):
+    # print(boolean)
+
+    predictedArray = carNumModel.predict(np.expand_dims(croppedNumber, axis=0))
+    predictedNumber = carNumbers[np.argmax(predictedArray)]
+    
+    return predictedNumber
 
 
 def predictPlate(cropped_letters):
 
     licenseString = ""
     for i in range(0,2):
-        letter =  predictLetter(cropped_letters[i], True)
+        letter =  predictLetter(cropped_letters[i])
         licenseString += letter
 
     for i in range(2,4):
-        letter =  predictNumber(cropped_letters[i], False)
+        letter =  predictNumber(cropped_letters[i])
         licenseString += letter
 
     return licenseString
+
 
 
 def callback(data):
@@ -452,9 +572,8 @@ def callback(data):
     global queue1
     global queue2
     global processedPlateStrings
-    global skipIsolations
-    global plateCounts
-    global plateSet
+    global plateReadings
+
     try:
         # Convert ROS Image message to OpenCV image
         cv_image = bridge.imgmsg_to_cv2(data, "bgr8")
@@ -466,30 +585,35 @@ def callback(data):
 
 
     if(skipIsolation == False):
-        output1, successful = isolatePlate(current_frame)
+        output1, output11, successful = isolatePlate(current_frame)
+        # cv2.imshow("Output11", output11)
+        # cv2.waitKey(1)
         if(successful==True):
+            queue1.put((output1,output11))
             # print("step1")
             queue1.put(output1)
             return
         
         if(not queue1.empty()):
-            # print("step2")
-            output2 = isolatePlate2(queue1.get())
-            if(output2!=None):
-                queue2.put(output2)
+            queue1Element = queue1.get()
+            output2 = isolatePlate2(queue1Element[0])
+            output22 = isolatePlate2_carNumber(queue1Element[1])
+            if(type(output2)!=type(None) and type(output22)!=type(None)):
+
+                # filename = "./data/"+str(carNumber)+"-{}-{}.jpg".format(count, session)
+                # cv2.imwrite(filename, output22)
+                # rospy.loginfo("Saved image {}".format(filename))
+                # count = count+1
+
+                queue2.put((output2,output22))
             return
         global current_vel
         global start_time
         if(not queue2.empty()):
-            # print("step3")
-            output3 = predictPlate(queue2.get())
-            plateSet.add(output3)
-            if(output3 in plateCounts):
-                plateCounts[output3] += 1
-            else:
-                plateCounts[output3] = 1
-            return
-        
+            queue2Element = queue2.get()
+            output3 = predictPlate(queue2Element[0])
+            output33 = predictCarNumber(queue2Element[1])
+            plateReadings[(int(output33))-1].append(output3)
     
 
 def on_press(key):
@@ -497,6 +621,7 @@ def on_press(key):
     global session
     global carNumber
     global skipIsolation
+    global plateReadings
     try:
         key_num = int(key.char)
     except (AttributeError, ValueError):
@@ -504,18 +629,22 @@ def on_press(key):
 
     if 7 <= key_num <= 8:
         print('You pressed {}'.format(key_num))
+        print(licensePlateList)
         skipIsolation = True
-        for plate in plateSet:
-            if(plateCounts[plate] > 1):
-                processedPlateStrings.append(plate)   
-        for plate in processedPlateStrings:
-            print(plate + ": " + str(plateCounts[plate]))
+        print(plateReadings)
+        for i in range(0,len(plateReadings)):
+            if (len(plateReadings[i])!=0):
+                count = collections.Counter(plateReadings[i])
+                most_common = count.most_common(1)
+                print("Plate " + str(i+1) + ": " + most_common[0][0] + ", numImages: " + str(count[most_common[0][0]])) 
 
     if 1 <= key_num <= 6:
         print('You pressed {}'.format(key_num))
         # Save the image with the specified file name
         carNumber += 1
         print("carNumber: ", carNumber)
+           
+
              
 
 if __name__ == '__main__':
@@ -528,10 +657,9 @@ if __name__ == '__main__':
     global processedPlateStrings
     global skipIsolation
     skipIsolation = False
-    global plateCounts
-    global plateSet
-    plateSet =  OrderedSet([])
-    plateCounts = {}
+    
+    global plateReadings
+    plateReadings = [[],[],[],[],[],[], [], []]
 
     processedPlateStrings = []
     queue1 = queue.Queue()
@@ -545,8 +673,9 @@ if __name__ == '__main__':
 
     letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
     numbers = "0123456789"
-    # letModel = keras.models.load_model("/home/fizzer/ros_ws/src/controller_pkg/data/let_model_4_quantized.tflite")
-    # numModel = keras.models.load_model("/home/fizzer/ros_ws/src/controller_pkg/data/num_model_3_quantized.tflite")
+    carNumbers = "12345678"
+
+    carNumModel = keras.models.load_model("/home/fizzer/ros_ws/src/controller_pkg/data/car_num_model_1.h5")
     # Open the CSV file
     with open('/home/fizzer/ros_ws/src/2022_competition/enph353/enph353_gazebo/scripts/plates.csv', newline='') as csvfile:
         # Create a CSV reader object

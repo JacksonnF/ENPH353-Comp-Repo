@@ -80,7 +80,7 @@ def contours(thresh_img):
         approx = cv2.approxPolyDP(cnt, 0.001 * cv2.arcLength(cnt, True), True)
         approx_contours.append(approx)
 
-    filtered_contours = [c for c in approx_contours if cv2.contourArea(c) > 8000]
+    filtered_contours = [c for c in approx_contours if cv2.contourArea(c) > 1000]
 
     if(len(filtered_contours)>0):
         # Finds the largest and second largest contours by area
@@ -412,13 +412,13 @@ def callback(data):
     if(temp is not None and temp[0] is not None and temp[1] is not None and temp[2] is not None and temp[3] is not None):
         current_croppedLetters_individual = temp
         collected_plates_arr.append(current_croppedLetters_individual)
-        # print(carNumber)
-        # print(licensePlateList[carNumber-1])
-        # for i in range(0,4):
-        #     filename = "./data/"+licensePlateList[carNumber-1][i+2]+"-{}-{}.jpg".format(count, session)
-        #     cv2.imwrite(filename, current_croppedLetters_individual[i])
-        #     rospy.loginfo("Saved image {}".format(filename))
-        #     count = count+1
+        print(carNumber)
+        print(licensePlateList[carNumber-1])
+        for i in range(0,4):
+            filename = "./data/"+licensePlateList[carNumber-1][i+2]+"-{}-{}.jpg".format(count, session)
+            cv2.imwrite(filename, current_croppedLetters_individual[i])
+            rospy.loginfo("Saved image {}".format(filename))
+            count = count+1
 
 
 def on_press(key):
@@ -457,8 +457,8 @@ if __name__ == '__main__':
 
     letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
     numbers = "0123456789"
-    letModel = keras.models.load_model("/home/fizzer/ros_ws/src/controller_pkg/data/let_model_4.h5")
-    numModel = keras.models.load_model("/home/fizzer/ros_ws/src/controller_pkg/data/num_model_4.h5")
+    letModel = keras.models.load_model("/home/fizzer/ros_ws/src/controller_pkg/data/let_model_5.h5")
+    numModel = keras.models.load_model("/home/fizzer/ros_ws/src/controller_pkg/data/num_model_5.h5")
     # Open the CSV file
     with open('/home/fizzer/ros_ws/src/2022_competition/enph353/enph353_gazebo/scripts/plates.csv', newline='') as csvfile:
         # Create a CSV reader object
