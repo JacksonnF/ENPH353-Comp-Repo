@@ -348,12 +348,13 @@ class image_converter:
     
     if self.fucked:
       print("fucked, turning left")
-      self.twist.angular.z = 1.0
+      self.twist.angular.z = 1.5
       self.twist.linear.x = 0.0
       self.cmd_vel_pub.publish(self.twist)
       bin_img = self.crop_for_prediction(cv_image, False)
       if np.mean(bin_img) != 0.0:
         self.fucked = False
+      return
 
 
     if self.enter_inner_loop:
@@ -500,18 +501,18 @@ class image_converter:
       pred = np.argmax(pred_arr)
       print(pred)
       next_prob = pred_arr[0][1]
-      p_scaled = min(-0.125/(next_prob - 1.0001), 0.8) #originallly 0.125
+      p_scaled = min(-0.125/(next_prob - 1.0001), 0.75) #originallly 0.125
       prev_speed = self.twist.linear.x
       if (pred == 0):
-        self.twist.linear.x = 0.0
-        self.twist.angular.z = 1.0 #1.3 good before
+        self.twist.linear.x = 0.1
+        self.twist.angular.z = 1.3 #1.3 good before
       elif (pred == 1):
-        # self.twist.linear.x = min(prev_speed + 0.1, p_scaled) #0.6 normally
+        self.twist.linear.x = min(prev_speed + 0.1, p_scaled) #0.6 normally
         self.twist.angular.z = 0.0
-        self.twist.linear.x = 0.36
+        # self.twist.linear.x = 0.36
       elif (pred == 2):
-        self.twist.linear.x = 0.0
-        self.twist.angular.z = -1.0
+        self.twist.linear.x = 0.1
+        self.twist.angular.z = -1.3
       self.cmd_vel_pub.publish(self.twist)
     
     if self.num_of_crosswalks > 1 and self.num_of_crosswalks != 69:
