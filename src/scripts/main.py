@@ -225,7 +225,7 @@ class image_converter:
     img_aug = np.expand_dims(img, axis=0)
     # input_data = np.expand_dims(np.array(img_aug, dtype=np.float32), axis=-1)
     input_data = np.array(img_aug, dtype=np.float32)
-    interpreter = tf.lite.Interpreter(model_path="/home/fizzer/ros_ws/src/controller_pkg/data/model_3_inner_quantized.tflite") #400aa best so far
+    interpreter = tf.lite.Interpreter(model_path="/home/fizzer/ros_ws/src/controller_pkg/data/model_5_inner_quantized.tflite") #400aa best so far
     interpreter.allocate_tensors()
 
     # Set the input tensor.
