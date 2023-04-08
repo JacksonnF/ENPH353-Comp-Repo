@@ -31,6 +31,7 @@ class image_converter:
     self.twist = Twist()
     self.twist.linear.x = 0.0
     self.twist.angular.z = 0.0
+    
 
     self.start = True
     self.end = False
@@ -53,6 +54,14 @@ class image_converter:
     self.stop_at_crosswalk = False
     self.area_seen_twice = 0
     self.start_time = time.time()
+    self.been_on_sand = 0
+    self.loop_count = 0
+    self.enter_inner_loop = False
+    self.align_cross_inner = False
+    self.inner_manuever = False
+    self.fucked = False
+    self.get_to_sand = False
+    
 
 
     # Stuff for pedestrian routine
@@ -100,16 +109,23 @@ class image_converter:
     lines = cv2.HoughLinesP(edges, rho, theta, threshold, np.array([]), 
                             min_line_length, max_line_gap)
     
+    next_line = None
     if lines is not None:
-        x1, y1, x2, y2 = lines[0][0]
+        for line in lines:
+          x1, y1, x2, y2 = line[0]
+          slope = (y2-y1)/(x2-x1)
+          if slope < 5:
+            next_line = line
+        # x1, y1, x2, y2 = lines[0][0]
+        x1, y1, x2, y2 = next_line[0]
         deg = np.rad2deg(np.arctan((y2-y1)/(x2-x1)))
-        print(deg)
+        # print(deg)
         if deg > 1:
             self.twist.linear.x = 0.0
-            self.twist.angular.z = -1.1
+            self.twist.angular.z = -0.6
         elif deg < -1:
             self.twist.linear.x = 0.0
-            self.twist.angular.z = 1.1
+            self.twist.angular.z = 0.6
         else:
             self.twist.linear.x = 0.0
             self.twist.angular.z = 0.0
@@ -121,12 +137,18 @@ class image_converter:
           self.stop_at_crosswalk = False
           self.aligned = 0
           self.num_of_crosswalks += 1
+          if self.align_cross_inner:
+            self.align_cross_inner = False
+            self.inner_manuever = True
           #  self.predict_sand(bottom_half_rgb)
         
     if lines is None:
       print('no lines found')
       self.waiting += 1
       if self.waiting > 3:
+        if self.align_cross_inner:
+          self.align_cross_inner = False
+          self.inner_manuever = True
         self.waiting_to_cross = True
         self.stop_at_crosswalk = False
         self.aligned = 0
@@ -156,7 +178,32 @@ class image_converter:
     img_aug = np.expand_dims(img, axis=0)
     input_data = np.expand_dims(np.array(img_aug, dtype=np.float32), axis=-1)
     # input_data = np.array(img_aug, dtype=np.float32)
+    start = time.time() * 1000
     interpreter = tf.lite.Interpreter(model_path="/home/fizzer/ros_ws/src/controller_pkg/data/model_3000c_quantized.tflite")
+    interpreter.allocate_tensors()
+    # print(time.time() * 1000 - start)
+    # print(start)
+    # Set the input tensor.
+    input_index = interpreter.get_input_details()[0]["index"]
+    interpreter.set_tensor(input_index, input_data)
+
+    # Run inference.
+    interpreter.invoke()
+
+  # Get the output tensor.
+    output_index = interpreter.get_output_details()[0]["index"]
+    output_data = interpreter.get_tensor(output_index)
+    # print(time.time() * 1000 - start)
+    # Print the predicted class.
+    predicted_class = np.argmax(output_data)
+    # print(predicted_class)
+    return output_data
+  
+  def predict_sand(self, img):
+    img_aug = np.expand_dims(img, axis=0)
+    # input_data = np.expand_dims(np.array(img_aug, dtype=np.float32), axis=-1)
+    input_data = np.array(img_aug, dtype=np.float32)
+    interpreter = tf.lite.Interpreter(model_path="/home/fizzer/ros_ws/src/controller_pkg/data/model_400aa_quantized.tflite") #400aa best so far
     interpreter.allocate_tensors()
 
     # Set the input tensor.
@@ -174,12 +221,11 @@ class image_converter:
     predicted_class = np.argmax(output_data)
     # print(predicted_class)
     return output_data
-  
-  def predict_sand(self, img):
+  def predict_inner(self, img):
     img_aug = np.expand_dims(img, axis=0)
     # input_data = np.expand_dims(np.array(img_aug, dtype=np.float32), axis=-1)
     input_data = np.array(img_aug, dtype=np.float32)
-    interpreter = tf.lite.Interpreter(model_path="/home/fizzer/ros_ws/src/controller_pkg/data/model_300_quantized_new.tflite")
+    interpreter = tf.lite.Interpreter(model_path="/home/fizzer/ros_ws/src/controller_pkg/data/model_5_inner_quantized.tflite") #400aa best so far
     interpreter.allocate_tensors()
 
     # Set the input tensor.
@@ -213,6 +259,29 @@ class image_converter:
       ret, bin_img = cv2.threshold(resized_img_gray[int(h/2):h, 0:w], 180,255,0)
       return bin_img
     
+  def check_for_sand_end(self, img):
+    w = img.shape[1]
+    h = img.shape[0]
+    cropped_img = img[h-240:h, 0:w]
+    blur = cv2.GaussianBlur(cropped_img, (5, 5), 0)
+    filtered = cv2.cvtColor(blur, cv2.COLOR_BGR2HSV)
+    mask = cv2.inRange(filtered, np.array([0, 0, 75]), np.array([5, 5, 90]))
+    contours, hierarchy = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    if len(contours) > 0:
+      area1 = cv2.contourArea(contours[0])
+      return area1
+    else:
+      return 0
+    
+  def check_for_sand_start(self, img):
+    w = img.shape[1]
+    h = img.shape[0]
+    cropped_img = img[h-240:h, 0:w]
+    blur = cv2.GaussianBlur(cropped_img, (5, 5), 0)
+    filtered = cv2.cvtColor(blur, cv2.COLOR_BGR2HSV)
+    mask = cv2.inRange(filtered, np.array([13, 72, 91]), np.array([37, 166, 183]))
+    area = cv2.countNonZero(mask)
+    return area
   def hsv_pedestrian(self, img):
     # Convert BGR to HSV color space
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
@@ -265,9 +334,10 @@ class image_converter:
   
   def callback(self,data):
     if self.start:
-      self.license_plate_pub.publish(str('TeamRed,multi12,0,XR58'))
       self.spawn_position(-0.85, 0 , 0.5, 0,0,1,0)
       self.initial_turn()
+      print('here')
+      self.license_plate_pub.publish(str('TeamRed,multi12,0,XR58'))
       self.start = False
       cv_image = self.bridge.imgmsg_to_cv2(data, "bgr8")
       self.prev_img = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
@@ -275,13 +345,34 @@ class image_converter:
       cv_image = self.bridge.imgmsg_to_cv2(data, "bgr8")
     except CvBridgeError as e:
       print(e)
+    
+    if self.fucked:
+      print("fucked, turning left")
+      self.twist.angular.z = 1.5
+      self.twist.linear.x = 0.0
+      self.cmd_vel_pub.publish(self.twist)
+      bin_img = self.crop_for_prediction(cv_image, False)
+      if np.mean(bin_img) != 0.0:
+        self.fucked = False
+      return
 
+
+    if self.enter_inner_loop:
+      if self.align_cross_inner:
+        self.align_robot(cv_image)
+        return
+      if self.inner_manuever:
+        self.inner_manuever_func()
+        self.license_plate_pub.publish(str('TeamRed,multi12,-1,XR58'))
+        return
+      return
+    
     if self.stop_at_crosswalk:
       self.align_robot(cv_image)
       return
        
     if self.waiting_to_cross:
-      print('cross')
+      # print('cross')
       #  gray = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
       #  print(np.mean(self.prev_img - gray)**2)
       #  self.prev_img = gray
@@ -302,8 +393,8 @@ class image_converter:
         #Last centroid and last speed initialized
         currentPedestrianSpeed = centroid[0] - self.lastCentroid[0]
 
-      print("current speed: ", currentPedestrianSpeed)
-      print("last speed: ", self.lastPedestrianSpeed)
+      # print("current speed: ", currentPedestrianSpeed)
+      # print("last speed: ", self.lastPedestrianSpeed)
 
       if(620<centroid[0] and centroid[0]<660):
           self.waiting_to_cross = False
@@ -318,20 +409,61 @@ class image_converter:
     
     #drive forward until both crosswalks are out of view
     if self.crossing:
-      print('crossing')
+      # print('crossing')
       contours = self.check_crosswalk_dist(cv_image)
+      # print(contours)
       if contours[0] < 150 and contours[1] < 150:
         self.crossing = False
+        return
       else:
-        self.twist.linear.x = 0.3
-        self.twist.angular.z = 0.0
-        self.cmd_vel_pub.publish(self.twist)
+        # ####
+        # self.twist.linear.x = 0.5
+        # self.twist.angular.z = 0.0
+        # self.cmd_vel_pub.publish(self.twist)
+        
+        # ####
+        if self.num_of_crosswalks == 1:
+          bin_img = self.crop_for_prediction(cv_image, False)
+          pred_arr = self.predict(bin_img)
+          pred = np.argmax(pred_arr)
+          next_prob = pred_arr[0][1]
+          p_scaled = min(-0.125/(next_prob - 1.0001), 1.0) #originallly 0.125
+          prev_speed = self.twist.linear.x
+          if (pred == 0):
+            self.twist.linear.x = 0.1
+            self.twist.angular.z = 1.2 #1.3 good before
+          elif (pred == 1):
+            self.twist.linear.x = min(prev_speed + 0.1, p_scaled) #0.6 normally
+            self.twist.angular.z = 0.0
+          elif (pred == 2):
+            self.twist.linear.x = 0.1
+            self.twist.angular.z = -1.2
+          self.cmd_vel_pub.publish(self.twist)
+        elif self.num_of_crosswalks == 2:
+          print('crossing')
+          self.crossing = False
+          self.get_to_sand = True
+          self.twist.linear.x = 0.5
+          self.twist.angular.z = 0.0
+          self.cmd_vel_pub.publish(self.twist)
+          return
+          # self.crossing = False
+
+      return
+    
+    if self.get_to_sand:
+      self.twist.linear.x = 0.5
+      self.twist.angular.z = 0.0
+      self.cmd_vel_pub.publish(self.twist)
+      area = self.check_for_sand_start(cv_image)
+      if area > 200000:
+        self.get_to_sand = False
       return
 
     
     areas = self.check_crosswalk_dist(cv_image)
     if len(areas) > 1:
-      print(areas)
+      # print(areas)
       if areas[0] > 5000 and areas[1]>75 and time.time()-self.start_time>5:
         # self.align_robot(cv_image)
         
@@ -339,42 +471,100 @@ class image_converter:
         self.twist.angular.z = 0.0
         self.cmd_vel_pub.publish(self.twist)
         self.stop_at_crosswalk = True
+          
         self.area_seen_twice = 0
+        if self.loop_count > 0:
+          self.enter_inner_loop = True
+          self.align_cross_inner = True
+          return
+        else:
+          self.stop_at_crosswalk = True
+          self.area_seen_twice = 0
         # self.waiting_to_cross = True
         return
 
-    
-    if self.num_of_crosswalks > 1:
-      bottom_half_rgb = self.crop_for_prediction(cv_image, True)
-      pred_arr = self.predict_sand(bottom_half_rgb)
-    else:
-      bin_img = self.crop_for_prediction(cv_image, False)
-      pred_arr = self.predict(bin_img)
-    pred = np.argmax(pred_arr)
-    if self.num_of_crosswalks > 1:
-      if (pred == 0):
+    #Check if sand has ended
+    if self.num_of_crosswalks > 1 and self.num_of_crosswalks != 69:
+      road_area = self.check_for_sand_end(cv_image)
+      if road_area > 80000 and self.been_on_sand > 25:
         self.twist.linear.x = 0.0
-        self.twist.angular.z = 1.1
-      elif (pred == 1):
-        self.twist.linear.x = 0.365
         self.twist.angular.z = 0.0
-      elif (pred == 2):
-        self.twist.linear.x = 0.0
-        self.twist.angular.z = -1.1
-
-      self.cmd_vel_pub.publish(self.twist)
-    else:
+        self.cmd_vel_pub.publish(self.twist)
+        print('sand ended')
+        self.num_of_crosswalks = 69 #0 to go back to normal
+        self.been_on_sand = 0
+        self.loop_count += 1
+        return
+    if self.num_of_crosswalks == 69:
+      bottom_half_rgb = self.crop_for_prediction(cv_image, True)
+      pred_arr = self.predict_inner(bottom_half_rgb)
+      pred = np.argmax(pred_arr)
+      print(pred)
       next_prob = pred_arr[0][1]
-      p_scaled = min(-0.125/(next_prob - 1.0001),1.0)
+      p_scaled = min(-0.125/(next_prob - 1.0001), 0.75) #originallly 0.125
       prev_speed = self.twist.linear.x
       if (pred == 0):
-        self.twist.linear.x = 0.09
+        self.twist.linear.x = 0.1
         self.twist.angular.z = 1.3 #1.3 good before
       elif (pred == 1):
         self.twist.linear.x = min(prev_speed + 0.1, p_scaled) #0.6 normally
         self.twist.angular.z = 0.0
+        # self.twist.linear.x = 0.36
       elif (pred == 2):
-        self.twist.linear.x = 0.09
+        self.twist.linear.x = 0.1
+        self.twist.angular.z = -1.3
+      self.cmd_vel_pub.publish(self.twist)
+    
+    if self.num_of_crosswalks > 1 and self.num_of_crosswalks != 69:
+      bottom_half_rgb = self.crop_for_prediction(cv_image, True)
+      pred_arr = self.predict_sand(bottom_half_rgb)
+      self.been_on_sand += 1
+    elif self.num_of_crosswalks != 69:
+      bin_img = self.crop_for_prediction(cv_image, False)
+      if np.mean(bin_img) == 0.0:
+        self.fucked = True
+        return
+      pred_arr = self.predict(bin_img)
+    pred = np.argmax(pred_arr)
+    if self.num_of_crosswalks > 1 and self.num_of_crosswalks != 69:
+      # if (pred == 0):
+      #   self.twist.linear.x = 0.1
+      #   self.twist.angular.z = 1.2
+      # elif (pred == 1):
+      #   self.twist.linear.x = 0.5
+      #   self.twist.angular.z = 0.0
+      # elif (pred == 2):
+      #   self.twist.linear.x = 0.1
+      #   self.twist.angular.z = -1.2
+      next_prob = pred_arr[0][1]
+      p_scaled = min(-0.125/(next_prob - 1.0001), 0.8) #originallly 0.125
+      prev_speed = self.twist.linear.x
+      if (pred == 0):
+        self.twist.linear.x = 0.1
+        self.twist.angular.z = 1.3 #1.3 good before
+      elif (pred == 1):
+        self.twist.linear.x = min(prev_speed + 0.1, p_scaled) #0.6 normally
+        self.twist.angular.z = 0.0
+        # self.twist.linear.x = 1.0
+      elif (pred == 2):
+        self.twist.linear.x = 0.1
+        self.twist.angular.z = -1.3
+
+
+      self.cmd_vel_pub.publish(self.twist)
+    elif self.num_of_crosswalks != 69:
+      next_prob = pred_arr[0][1]
+      p_scaled = min(-0.125/(next_prob - 1.0001), 1.0) #originallly 0.125
+      prev_speed = self.twist.linear.x
+      if (pred == 0):
+        self.twist.linear.x = 0.1
+        self.twist.angular.z = 1.3 #1.3 good before
+      elif (pred == 1):
+        self.twist.linear.x = min(prev_speed + 0.1, p_scaled) #0.6 normally
+        self.twist.angular.z = 0.0
+        # self.twist.linear.x = 1.0
+      elif (pred == 2):
+        self.twist.linear.x = 0.1
         self.twist.angular.z = -1.3
 
       self.cmd_vel_pub.publish(self.twist)    
@@ -476,22 +666,41 @@ class image_converter:
         
 
   def initial_turn(self):
-    
-    time.sleep(1)    
+    time.sleep(1.0)
     self.twist.linear.x = 0.5
     self.twist.angular.z = 0.0
     self.cmd_vel_pub.publish(self.twist)
     time.sleep(0.75)
     self.twist.linear.x = 0.0
-    self.twist.angular.z = 1.0
+    self.twist.angular.z = 1.5
     self.cmd_vel_pub.publish(self.twist)
-    time.sleep(2.1)
+    time.sleep(1.5)
     self.twist.linear.x = 0.0
     self.twist.angular.z = 0.0
     self.cmd_vel_pub.publish(self.twist)
-    time.sleep(2)
+    # time.sleep(2)
     self.finished_manuever = True
     self.start = False
+
+  def inner_manuever_func(self):
+    # time.sleep(1)    
+    self.twist.linear.x = -0.5
+    self.twist.angular.z = 0.0
+    self.cmd_vel_pub.publish(self.twist)
+    time.sleep(0.49)
+    self.twist.linear.x = 0.0
+    self.twist.angular.z = 1.0
+    self.cmd_vel_pub.publish(self.twist)
+    time.sleep(2.1)
+    self.twist.linear.x = 0.35
+    self.twist.angular.z = 0.0
+    self.cmd_vel_pub.publish(self.twist)
+    time.sleep(0.7)
+    self.twist.linear.x = 0.0
+    self.twist.angular.z = 0.0
+    self.cmd_vel_pub.publish(self.twist)
+
+    self.inner_manuever = False
     
 def on_press(key):
     global end_global

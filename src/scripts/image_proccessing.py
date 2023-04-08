@@ -6,6 +6,8 @@ import cv2
 from sensor_msgs.msg import Image
 import numpy as np
 import time
+import conv_net
+import torch
 
 class image_converter:
 
@@ -27,6 +29,9 @@ class image_converter:
     self.ped_seen_count = 0
     self.state = 0
     
+    self.model = conv_net.ConvNet()
+    self.model.load_state_dict(torch.load("/home/fizzer/ros_ws/src/controller_pkg/data/model_2_pytorch.pth", map_location=torch.device('cpu')))
+    self.model.eval()
 
 
   def check_crosswalk_dist(self, img):
@@ -89,9 +94,34 @@ class image_converter:
       cv_image = self.bridge.imgmsg_to_cv2(data, "bgr8")
     except CvBridgeError as e:
       print(e)
-
-    self.check_crosswalk_dist(cv_image)
+   
+    cv2.imshow("image", cv_image)
+    cv2.waitKey(3)
     
+  def predict_pytorch(self, img):
+    scale_percent = 20
+    w = int(img.shape[1] * scale_percent / 100)
+    h = int(img.shape[0] * scale_percent / 100)
+    dim = (w, h)
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    resized_img_gray = cv2.resize(gray, dim, interpolation=cv2.INTER_AREA)
+    ret, bin_img = cv2.threshold(resized_img_gray[int(h/2):h, 0:w], 180,255,0)
+    bin_img = [bin_img]
+    img_data = np.array(bin_img)
+    image_data = img_data.reshape(-1, 1, img_data.shape[1], img_data.shape[2])
+
+    # Convert the data type to float32 and normalize the pixel values to [0, 1]
+    image_data = image_data.astype('float32') / 255.0
+
+    # Convert the array to a PyTorch tensor
+    image_tensor = torch.from_numpy(image_data)
+    start_time = time.time()
+    
+    with torch.no_grad():
+      outputs = self.model(image_tensor)
+    
+    print(time.time() - start_time)
+    return outputs
 
 
 def main():

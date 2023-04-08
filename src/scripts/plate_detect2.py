@@ -5,7 +5,8 @@ from gazebo_msgs.msg import ModelState
 from geometry_msgs.msg import Pose, Quaternion
 import numpy as np
 import time
-from tensorflow import keras
+# from tensorflow import keras
+import tensorflow as tf
 from ordered_set import OrderedSet
 import cv2
 from cv_bridge import CvBridge, CvBridgeError
@@ -15,6 +16,8 @@ import roslaunch
 import csv
 from pynput import keyboard
 import collections
+from std_msgs.msg import String
+
 
 collected_plates_arr = []
 
@@ -493,27 +496,82 @@ def predictLetter(croppedLetter):
 
     # print(boolean)
 
-    predictedArray = letModel.predict(np.expand_dims(croppedLetter, axis=0))
-    predictedLetter = letters[np.argmax(predictedArray)]
-    
-    return predictedLetter
+    # predictedArray = letModel.predict(np.expand_dims(croppedLetter, axis=0))
+    # predictedLetter = letters[np.argmax(predictedArray)]
+    img_aug = np.expand_dims(croppedLetter, axis=0)
+    input_data = np.expand_dims(np.array(img_aug, dtype=np.float32), axis=-1)
+
+    interpreter = tf.lite.Interpreter('/home/fizzer/ros_ws/src/controller_pkg/data/let_model_4_quantized.tflite')
+    interpreter.allocate_tensors()
+
+    # Set the input tensor.
+    input_index = interpreter.get_input_details()[0]["index"]
+    interpreter.set_tensor(input_index, input_data)
+
+    # Run inference.
+    interpreter.invoke()
+
+    # Get the output tensor.
+    output_index = interpreter.get_output_details()[0]["index"]
+    output_data = interpreter.get_tensor(output_index)
+
+    # # Print the predicted class.
+    # predicted_class = np.argmax(output_data)
+    return letters[np.argmax(output_data)]
 
 def predictNumber(croppedNumber):
     # print(boolean)
 
-    predictedArray = numModel.predict(np.expand_dims(croppedNumber, axis=0))
-    predictedNumber = numbers[np.argmax(predictedArray)]
+    # predictedArray = numModel.predict(np.expand_dims(croppedNumber, axis=0))
+    # predictedNumber = numbers[np.argmax(predictedArray)]
+    img_aug = np.expand_dims(croppedNumber, axis=0)
+    input_data = np.expand_dims(np.array(img_aug, dtype=np.float32), axis=-1)
+
+    interpreter = tf.lite.Interpreter('/home/fizzer/ros_ws/src/controller_pkg/data/num_model_4.2_quantized.tflite')
+    interpreter.allocate_tensors()
+
+    # Set the input tensor.
+    input_index = interpreter.get_input_details()[0]["index"]
+    interpreter.set_tensor(input_index, input_data)
+
+    # Run inference.
+    interpreter.invoke()
+
+    # Get the output tensor.
+    output_index = interpreter.get_output_details()[0]["index"]
+    output_data = interpreter.get_tensor(output_index)
+
+    # # Print the predicted class.
+    # predicted_class = np.argmax(output_data)
+    return numbers[np.argmax(output_data)]
     
-    return predictedNumber
 
 def predictCarNumber(croppedNumber):
     # print(boolean)
 
-    predictedArray = carNumModel.predict(np.expand_dims(croppedNumber, axis=0))
-    predictedNumber = carNumbers[np.argmax(predictedArray)]
-    
-    return predictedNumber
+    # predictedArray = carNumModel.predict(np.expand_dims(croppedNumber, axis=0))
+    # predictedNumber = carNumbers[np.argmax(predictedArray)]
+    img_aug = np.expand_dims(croppedNumber, axis=0)
+    input_data = np.expand_dims(np.array(img_aug, dtype=np.float32), axis=-1)
 
+    interpreter = tf.lite.Interpreter('/home/fizzer/ros_ws/src/controller_pkg/data/car_num_model_1_quantized.tflite')
+    interpreter.allocate_tensors()
+
+    # Set the input tensor.
+    input_index = interpreter.get_input_details()[0]["index"]
+    interpreter.set_tensor(input_index, input_data)
+
+    # Run inference.
+    interpreter.invoke()
+
+    # Get the output tensor.
+    output_index = interpreter.get_output_details()[0]["index"]
+    output_data = interpreter.get_tensor(output_index)
+
+    # # Print the predicted class.
+    # predicted_class = np.argmax(output_data)
+    return carNumbers[np.argmax(output_data)]
+    
 
 def predictPlate(cropped_letters):
 
@@ -595,12 +653,18 @@ def on_press(key):
         print('You pressed {}'.format(key_num))
         print(licensePlateList)
         skipIsolation = True
-        print(plateReadings)
+        
+        # print(plateReadings)
+        global license_plate_pub    
+        rate = rospy.Rate(1)
         for i in range(0,len(plateReadings)):
             if (len(plateReadings[i])!=0):
                 count = collections.Counter(plateReadings[i])
                 most_common = count.most_common(1)
                 print("Plate " + str(i+1) + ": " + most_common[0][0] + ", numImages: " + str(count[most_common[0][0]]))
+                print(str('TeamRed,multi12,'+str(count[most_common[0][0]])+','+most_common[0][0]))
+                license_plate_pub.publish(str('TeamRed,multi12,'+str(i+1)+','+most_common[0][0]))
+                rate.sleep()
 
     if 1 <= key_num <= 6:
         print('You pressed {}'.format(key_num))
@@ -621,6 +685,7 @@ if __name__ == '__main__':
     skipIsolation = False
     
     global plateReadings
+    global license_plate_pub
     plateReadings = [[],[],[],[],[],[], [], []]
 
     processedPlateStrings = []
@@ -630,14 +695,16 @@ if __name__ == '__main__':
     time.sleep(1)
     rospy.init_node('image_isolator')
     image_sub = rospy.Subscriber('/R1/pi_camera/image_raw', Image, callback)
+    license_plate_pub = rospy.Publisher('/license_plate', String, 
+                                             queue_size=1)
     licensePlateList = []
 
     letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
     numbers = "0123456789"
     carNumbers = "12345678"
-    letModel = keras.models.load_model("/home/fizzer/ros_ws/src/controller_pkg/data/let_model_4.h5")
-    numModel = keras.models.load_model("/home/fizzer/ros_ws/src/controller_pkg/data/num_model_4.2.h5")
-    carNumModel = keras.models.load_model("/home/fizzer/ros_ws/src/controller_pkg/data/car_num_model_1.h5")
+    # letModel = keras.models.load_model("/home/fizzer/ros_ws/src/controller_pkg/data/let_model_4.h5")
+    # numModel = keras.models.load_model("/home/fizzer/ros_ws/src/controller_pkg/data/num_model_4.2.h5")
+    # carNumModel = keras.models.load_model("/home/fizzer/ros_ws/src/controller_pkg/data/car_num_model_1.h5")
     # Open the CSV file
     with open('/home/fizzer/ros_ws/src/2022_competition/enph353/enph353_gazebo/scripts/plates.csv', newline='') as csvfile:
         # Create a CSV reader object
@@ -646,26 +713,6 @@ if __name__ == '__main__':
         for row in reader:
             licensePlateList.append(str(row))
     print(licensePlateList)
-
-    import csv
-
-    # Open the CSV file
-    with open('/home/fizzer/ros_ws/src/controller_pkg/data/session.csv', newline='') as csvfile:
-        # Create a CSV reader object
-        reader = csv.reader(csvfile)
-        # Read the single row
-        row = next(reader)
-        # Get the single element
-        session = row[0]
-        # Increment the number by 1
-        new_element = str(int(session) + 1)
-
-    # Open the CSV file for writing
-    with open('/home/fizzer/ros_ws/src/controller_pkg/data/session.csv', 'w', newline='') as csvfile:
-        # Create a CSV writer object
-        writer = csv.writer(csvfile)
-        # Write the updated element to the CSV file
-        writer.writerow([new_element])
         
 
     # Setup the key listener
@@ -677,11 +724,5 @@ if __name__ == '__main__':
 
     global count
     count = 0
-
-
-
-
-    
-    
     
     rospy.spin()
