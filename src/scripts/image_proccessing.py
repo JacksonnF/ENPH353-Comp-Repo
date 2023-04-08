@@ -94,9 +94,7 @@ class image_converter:
       cv_image = self.bridge.imgmsg_to_cv2(data, "bgr8")
     except CvBridgeError as e:
       print(e)
-    
-    print(self.predict_pytorch(cv_image))
- 
+   
     cv2.imshow("image", cv_image)
     cv2.waitKey(3)
     

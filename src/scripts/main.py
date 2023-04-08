@@ -59,6 +59,8 @@ class image_converter:
     self.enter_inner_loop = False
     self.align_cross_inner = False
     self.inner_manuever = False
+    self.fucked = False
+    self.get_to_sand = False
     
 
 
@@ -219,6 +221,28 @@ class image_converter:
     predicted_class = np.argmax(output_data)
     # print(predicted_class)
     return output_data
+  def predict_inner(self, img):
+    img_aug = np.expand_dims(img, axis=0)
+    # input_data = np.expand_dims(np.array(img_aug, dtype=np.float32), axis=-1)
+    input_data = np.array(img_aug, dtype=np.float32)
+    interpreter = tf.lite.Interpreter(model_path="/home/fizzer/ros_ws/src/controller_pkg/data/model_3_inner_quantized.tflite") #400aa best so far
+    interpreter.allocate_tensors()
+
+    # Set the input tensor.
+    input_index = interpreter.get_input_details()[0]["index"]
+    interpreter.set_tensor(input_index, input_data)
+
+    # Run inference.
+    interpreter.invoke()
+
+  # Get the output tensor.
+    output_index = interpreter.get_output_details()[0]["index"]
+    output_data = interpreter.get_tensor(output_index)
+
+    # Print the predicted class.
+    predicted_class = np.argmax(output_data)
+    # print(predicted_class)
+    return output_data
   
   def crop_for_prediction(self, img, type):
     scale_percent = 20
@@ -248,6 +272,16 @@ class image_converter:
       return area1
     else:
       return 0
+    
+  def check_for_sand_start(self, img):
+    w = img.shape[1]
+    h = img.shape[0]
+    cropped_img = img[h-240:h, 0:w]
+    blur = cv2.GaussianBlur(cropped_img, (5, 5), 0)
+    filtered = cv2.cvtColor(blur, cv2.COLOR_BGR2HSV)
+    mask = cv2.inRange(filtered, np.array([13, 72, 91]), np.array([37, 166, 183]))
+    area = cv2.countNonZero(mask)
+    return area
   def hsv_pedestrian(self, img):
     # Convert BGR to HSV color space
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
@@ -311,6 +345,16 @@ class image_converter:
       cv_image = self.bridge.imgmsg_to_cv2(data, "bgr8")
     except CvBridgeError as e:
       print(e)
+    
+    if self.fucked:
+      print("fucked, turning left")
+      self.twist.angular.z = 1.0
+      self.twist.linear.x = 0.0
+      self.cmd_vel_pub.publish(self.twist)
+      bin_img = self.crop_for_prediction(cv_image, False)
+      if np.mean(bin_img) != 0.0:
+        self.fucked = False
+
 
     if self.enter_inner_loop:
       if self.align_cross_inner:
@@ -369,6 +413,7 @@ class image_converter:
       # print(contours)
       if contours[0] < 150 and contours[1] < 150:
         self.crossing = False
+        return
       else:
         # ####
         # self.twist.linear.x = 0.5
@@ -394,25 +439,24 @@ class image_converter:
             self.twist.angular.z = -1.2
           self.cmd_vel_pub.publish(self.twist)
         elif self.num_of_crosswalks == 2:
-          # bottom_half_rgb = self.crop_for_prediction(cv_image, True)
-          # pred_arr = self.predict_sand(bottom_half_rgb)
-          # pred = np.argmax(pred_arr)
-          # next_prob = pred_arr[0][1]
-          # p_scaled = min(-0.125/(next_prob - 1.0001), 0.8) #originallly 0.125
-          # prev_speed = self.twist.linear.x
-          # if (pred == 0):
-          #   self.twist.linear.x = 0.1
-          #   self.twist.angular.z = 1.3 #1.3 good before
-          # elif (pred == 1):
-          #   self.twist.linear.x = min(prev_speed + 0.1, p_scaled) #0.6 normally
-          #   self.twist.angular.z = 0.0
-          #   # self.twist.linear.x = 1.0
-          # elif (pred == 2):
+          print('crossing')
+          self.crossing = False
+          self.get_to_sand = True
           self.twist.linear.x = 0.5
           self.twist.angular.z = 0.0
           self.cmd_vel_pub.publish(self.twist)
-          time.sleep(1.5)
+          return
+          # self.crossing = False
 
+      return
+    
+    if self.get_to_sand:
+      self.twist.linear.x = 0.5
+      self.twist.angular.z = 0.0
+      self.cmd_vel_pub.publish(self.twist)
+      area = self.check_for_sand_start(cv_image)
+      if area > 200000:
+        self.get_to_sand = False
       return
 
     
@@ -439,28 +483,49 @@ class image_converter:
         return
 
     #Check if sand has ended
-    if self.num_of_crosswalks > 1:
+    if self.num_of_crosswalks > 1 and self.num_of_crosswalks != 69:
       road_area = self.check_for_sand_end(cv_image)
       if road_area > 80000 and self.been_on_sand > 25:
         self.twist.linear.x = 0.0
         self.twist.angular.z = 0.0
         self.cmd_vel_pub.publish(self.twist)
         print('sand ended')
-        self.num_of_crosswalks = 0
+        self.num_of_crosswalks = 69 #0 to go back to normal
         self.been_on_sand = 0
         self.loop_count += 1
         return
-
+    if self.num_of_crosswalks == 69:
+      bottom_half_rgb = self.crop_for_prediction(cv_image, True)
+      pred_arr = self.predict_inner(bottom_half_rgb)
+      pred = np.argmax(pred_arr)
+      print(pred)
+      next_prob = pred_arr[0][1]
+      p_scaled = min(-0.125/(next_prob - 1.0001), 0.8) #originallly 0.125
+      prev_speed = self.twist.linear.x
+      if (pred == 0):
+        self.twist.linear.x = 0.0
+        self.twist.angular.z = 1.0 #1.3 good before
+      elif (pred == 1):
+        # self.twist.linear.x = min(prev_speed + 0.1, p_scaled) #0.6 normally
+        self.twist.angular.z = 0.0
+        self.twist.linear.x = 0.36
+      elif (pred == 2):
+        self.twist.linear.x = 0.0
+        self.twist.angular.z = -1.0
+      self.cmd_vel_pub.publish(self.twist)
     
-    if self.num_of_crosswalks > 1:
+    if self.num_of_crosswalks > 1 and self.num_of_crosswalks != 69:
       bottom_half_rgb = self.crop_for_prediction(cv_image, True)
       pred_arr = self.predict_sand(bottom_half_rgb)
       self.been_on_sand += 1
-    else:
+    elif self.num_of_crosswalks != 69:
       bin_img = self.crop_for_prediction(cv_image, False)
+      if np.mean(bin_img) == 0.0:
+        self.fucked = True
+        return
       pred_arr = self.predict(bin_img)
     pred = np.argmax(pred_arr)
-    if self.num_of_crosswalks > 1:
+    if self.num_of_crosswalks > 1 and self.num_of_crosswalks != 69:
       # if (pred == 0):
       #   self.twist.linear.x = 0.1
       #   self.twist.angular.z = 1.2
@@ -486,7 +551,7 @@ class image_converter:
 
 
       self.cmd_vel_pub.publish(self.twist)
-    else:
+    elif self.num_of_crosswalks != 69:
       next_prob = pred_arr[0][1]
       p_scaled = min(-0.125/(next_prob - 1.0001), 1.0) #originallly 0.125
       prev_speed = self.twist.linear.x
