@@ -327,7 +327,7 @@ class image_converter:
       return
        
     if self.waiting_to_cross:
-      print('cross')
+      # print('cross')
       #  gray = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
       #  print(np.mean(self.prev_img - gray)**2)
       #  self.prev_img = gray
@@ -364,9 +364,9 @@ class image_converter:
     
     #drive forward until both crosswalks are out of view
     if self.crossing:
-      print('crossing')
+      # print('crossing')
       contours = self.check_crosswalk_dist(cv_image)
-      print(contours)
+      # print(contours)
       if contours[0] < 150 and contours[1] < 150:
         self.crossing = False
       else:
@@ -376,22 +376,43 @@ class image_converter:
         # self.cmd_vel_pub.publish(self.twist)
         
         # ####
-        bin_img = self.crop_for_prediction(cv_image, False)
-        pred_arr = self.predict(bin_img)
-        pred = np.argmax(pred_arr)
-        next_prob = pred_arr[0][1]
-        p_scaled = min(-0.125/(next_prob - 1.0001), 1.0) #originallly 0.125
-        prev_speed = self.twist.linear.x
-        if (pred == 0):
-          self.twist.linear.x = 0.1
-          self.twist.angular.z = 1.2 #1.3 good before
-        elif (pred == 1):
-          self.twist.linear.x = min(prev_speed + 0.1, p_scaled) #0.6 normally
+        if self.num_of_crosswalks == 1:
+          bin_img = self.crop_for_prediction(cv_image, False)
+          pred_arr = self.predict(bin_img)
+          pred = np.argmax(pred_arr)
+          next_prob = pred_arr[0][1]
+          p_scaled = min(-0.125/(next_prob - 1.0001), 1.0) #originallly 0.125
+          prev_speed = self.twist.linear.x
+          if (pred == 0):
+            self.twist.linear.x = 0.1
+            self.twist.angular.z = 1.2 #1.3 good before
+          elif (pred == 1):
+            self.twist.linear.x = min(prev_speed + 0.1, p_scaled) #0.6 normally
+            self.twist.angular.z = 0.0
+          elif (pred == 2):
+            self.twist.linear.x = 0.1
+            self.twist.angular.z = -1.2
+          self.cmd_vel_pub.publish(self.twist)
+        elif self.num_of_crosswalks == 2:
+          # bottom_half_rgb = self.crop_for_prediction(cv_image, True)
+          # pred_arr = self.predict_sand(bottom_half_rgb)
+          # pred = np.argmax(pred_arr)
+          # next_prob = pred_arr[0][1]
+          # p_scaled = min(-0.125/(next_prob - 1.0001), 0.8) #originallly 0.125
+          # prev_speed = self.twist.linear.x
+          # if (pred == 0):
+          #   self.twist.linear.x = 0.1
+          #   self.twist.angular.z = 1.3 #1.3 good before
+          # elif (pred == 1):
+          #   self.twist.linear.x = min(prev_speed + 0.1, p_scaled) #0.6 normally
+          #   self.twist.angular.z = 0.0
+          #   # self.twist.linear.x = 1.0
+          # elif (pred == 2):
+          self.twist.linear.x = 0.5
           self.twist.angular.z = 0.0
-        elif (pred == 2):
-          self.twist.linear.x = 0.1
-          self.twist.angular.z = -1.2
-        self.cmd_vel_pub.publish(self.twist)
+          self.cmd_vel_pub.publish(self.twist)
+          time.sleep(1.5)
+
       return
 
     
