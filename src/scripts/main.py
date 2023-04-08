@@ -59,6 +59,8 @@ class image_converter:
     self.enter_inner_loop = False
     self.align_cross_inner = False
     self.inner_manuever = False
+    self.fucked = False
+    self.get_to_sand = False
     
 
 
@@ -248,6 +250,15 @@ class image_converter:
       return area1
     else:
       return 0
+  def check_for_sand_start(self, img):
+    w = img.shape[1]
+    h = img.shape[0]
+    cropped_img = img[h-240:h, 0:w]
+    blur = cv2.GaussianBlur(cropped_img, (5, 5), 0)
+    filtered = cv2.cvtColor(blur, cv2.COLOR_BGR2HSV)
+    mask = cv2.inRange(filtered, np.array([13, 72, 91]), np.array([37, 166, 183]))
+    area = cv2.countNonZero(mask)
+    return area
   def hsv_pedestrian(self, img):
     # Convert BGR to HSV color space
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
@@ -311,6 +322,16 @@ class image_converter:
       cv_image = self.bridge.imgmsg_to_cv2(data, "bgr8")
     except CvBridgeError as e:
       print(e)
+
+    if self.fucked:
+      print("fucked, turning left")
+      self.twist.angular.z = 1.0
+      self.twist.linear.x = 0.0
+      self.cmd_vel_pub.publish(self.twist)
+      bin_img = self.crop_for_prediction(cv_image, False)
+      if np.mean(bin_img) != 0.0:
+        self.fucked = False
+      return
 
     if self.enter_inner_loop:
       if self.align_cross_inner:
@@ -394,25 +415,23 @@ class image_converter:
             self.twist.angular.z = -1.2
           self.cmd_vel_pub.publish(self.twist)
         elif self.num_of_crosswalks == 2:
-          # bottom_half_rgb = self.crop_for_prediction(cv_image, True)
-          # pred_arr = self.predict_sand(bottom_half_rgb)
-          # pred = np.argmax(pred_arr)
-          # next_prob = pred_arr[0][1]
-          # p_scaled = min(-0.125/(next_prob - 1.0001), 0.8) #originallly 0.125
-          # prev_speed = self.twist.linear.x
-          # if (pred == 0):
-          #   self.twist.linear.x = 0.1
-          #   self.twist.angular.z = 1.3 #1.3 good before
-          # elif (pred == 1):
-          #   self.twist.linear.x = min(prev_speed + 0.1, p_scaled) #0.6 normally
-          #   self.twist.angular.z = 0.0
-          #   # self.twist.linear.x = 1.0
-          # elif (pred == 2):
+          print('crossing')
+          self.crossing = False
+          self.get_to_sand = True
           self.twist.linear.x = 0.5
           self.twist.angular.z = 0.0
           self.cmd_vel_pub.publish(self.twist)
-          time.sleep(0.5)
+          return
 
+      return
+    
+    if self.get_to_sand:
+      self.twist.linear.x = 0.5
+      self.twist.angular.z = 0.0
+      self.cmd_vel_pub.publish(self.twist)
+      area = self.check_for_sand_start(cv_image)
+      if area > 200000:
+        self.get_to_sand = False
       return
 
     
@@ -459,6 +478,9 @@ class image_converter:
       self.been_on_sand += 1
     else:
       bin_img = self.crop_for_prediction(cv_image, False)
+      if np.mean(bin_img) == 0.0:
+        self.fucked = True
+        return
       pred_arr = self.predict(bin_img)
     pred = np.argmax(pred_arr)
     if self.num_of_crosswalks > 1:
