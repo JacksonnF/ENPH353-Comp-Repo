@@ -95,10 +95,27 @@ class image_converter:
     except CvBridgeError as e:
       print(e)
     
-    # print(self.predict_pytorch(cv_image))
-    truck = hsvTruck(self, cv_image)
-    cv2.imshow("image", truck)
-    cv2.waitKey(1)
+    time.sleep(1.0)
+    # self.twist.linear.x = 0.5
+    # self.twist.angular.z = 0.0
+    # self.cmd_vel_pub.publish(self.twist)
+    # time.sleep(0.75)
+    # self.twist.linear.x = 0.0
+    # self.twist.angular.z = 1.5
+    # self.cmd_vel_pub.publish(self.twist)
+    # time.sleep(1.5)
+    # self.twist.linear.x = 0.0
+    # self.twist.angular.z = 0.0
+    # self.cmd_vel_pub.publish(self.twist)
+
+    self.twist.linear.x = 0.7
+    self.twist.angular.z = 2.4
+    self.cmd_vel_pub.publish(self.twist)
+    time.sleep(0.7)
+    self.twist.linear.x = 0.0
+    self.twist.angular.z = 0.0
+    self.cmd_vel_pub.publish(self.twist)
+    time.sleep(5)
 
     # sand = hsvSand(self, cv_image)
     # cv2.imshow("sand", sand)
