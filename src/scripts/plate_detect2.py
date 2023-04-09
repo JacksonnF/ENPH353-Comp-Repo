@@ -636,6 +636,9 @@ def callback(data):
             output3 = predictPlate(queue2Element[0])
             output33 = predictCarNumber(queue2Element[1])
             plateReadings[(int(output33))-1].append(output3)
+    # if len(plateReadings) == 8:
+    #     print('here')
+    #     on_press(7)
     
 
 def on_press(key):
@@ -656,7 +659,7 @@ def on_press(key):
         
         # print(plateReadings)
         global license_plate_pub    
-        rate = rospy.Rate(1)
+        rate = rospy.Rate(0.1)
         for i in range(0,len(plateReadings)):
             if (len(plateReadings[i])!=0):
                 count = collections.Counter(plateReadings[i])
@@ -665,6 +668,7 @@ def on_press(key):
                 print(str('TeamRed,multi12,'+str(count[most_common[0][0]])+','+most_common[0][0]))
                 license_plate_pub.publish(str('TeamRed,multi12,'+str(i+1)+','+most_common[0][0]))
                 rate.sleep()
+        license_plate_pub.publish(str('TeamRed,multi12,-1,XR58'))
 
     if 1 <= key_num <= 6:
         print('You pressed {}'.format(key_num))

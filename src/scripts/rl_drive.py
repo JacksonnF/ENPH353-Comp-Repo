@@ -121,11 +121,12 @@ class data_collector:
       spawn_at_start = False
     
     gray = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
-    scale_percent = 20
+    scale_percent = 10 #20 for previous data
 
     w = int(gray.shape[1] * scale_percent / 100)
     h = int(gray.shape[0] * scale_percent / 100)
     dim = (w, h)
+    print(dim)
 
     resized_img_rgb = cv2.resize(cv_image, dim, interpolation=cv2.INTER_AREA)
     resized_img_gray = cv2.resize(gray, dim, interpolation=cv2.INTER_AREA)
