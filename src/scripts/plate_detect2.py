@@ -659,7 +659,7 @@ def on_press(key):
         
         # print(plateReadings)
         global license_plate_pub    
-        rate = rospy.Rate(0.1)
+        rate = rospy.Rate(10)
         for i in range(0,len(plateReadings)):
             if (len(plateReadings[i])!=0):
                 count = collections.Counter(plateReadings[i])

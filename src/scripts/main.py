@@ -61,6 +61,7 @@ class image_converter:
     self.inner_manuever = False
     self.fucked = False
     self.get_to_sand = False
+    self.numberOfPredictions = 0
     
 
 
@@ -173,6 +174,32 @@ class image_converter:
     else:
       return (0, 0)
 
+  def predict_smaller(self, img):
+    img_aug = np.expand_dims(img, axis=0)
+    # input_data = np.expand_dims(np.array(img_aug, dtype=np.float32), axis=-1)
+    input_data = np.array(img_aug, dtype=np.float32)
+    # input_data = np.array(img_aug, dtype=np.float32)
+    start = time.time() * 1000
+    # interpreter = tf.lite.Interpreter(model_path="/home/fizzer/ros_ws/src/controller_pkg/data/model_3000c_quantized.tflite")
+    interpreter = tf.lite.Interpreter(model_path="/home/fizzer/ros_ws/src/controller_pkg/data/model_99_quantized.tflite")
+    interpreter.allocate_tensors()
+    print(time.time() * 1000 - start)
+    # print(start)
+    # Set the input tensor.
+    input_index = interpreter.get_input_details()[0]["index"]
+    interpreter.set_tensor(input_index, input_data)
+
+    # Run inference.
+    interpreter.invoke()
+
+  # Get the output tensor.
+    output_index = interpreter.get_output_details()[0]["index"]
+    output_data = interpreter.get_tensor(output_index)
+    # print(time.time() * 1000 - start)
+    # Print the predicted class.
+    predicted_class = np.argmax(output_data)
+    # print(predicted_class)
+    return output_data
 
   def predict(self, img):
     img_aug = np.expand_dims(img, axis=0)
@@ -180,8 +207,9 @@ class image_converter:
     # input_data = np.array(img_aug, dtype=np.float32)
     start = time.time() * 1000
     interpreter = tf.lite.Interpreter(model_path="/home/fizzer/ros_ws/src/controller_pkg/data/model_3000c_quantized.tflite")
+    # interpreter = tf.lite.Interpreter(model_path="/home/fizzer/ros_ws/src/controller_pkg/data/model_99_quantized.tflite")
     interpreter.allocate_tensors()
-    # print(time.time() * 1000 - start)
+    print(time.time() * 1000 - start)
     # print(start)
     # Set the input tensor.
     input_index = interpreter.get_input_details()[0]["index"]
@@ -523,7 +551,9 @@ class image_converter:
       pred_arr = self.predict_sand(bottom_half_rgb)
       self.been_on_sand += 1
     elif self.num_of_crosswalks != 69:
-      bin_img = self.crop_for_prediction(cv_image, False)
+      # bin_img = self.crop_for_prediction(cv_image, False)
+      img = self.crop_for_prediction(cv_image, True)
+      bin_img = cv2.resize(cv2.resize(img, (128,36), interpolation=cv2.INTER_AREA), (64,36), interpolation=cv2.INTER_AREA)
       if np.mean(bin_img) == 0.0:
         self.fucked = True
         self.twist.angular.z = 1.5
@@ -531,7 +561,7 @@ class image_converter:
         self.cmd_vel_pub.publish(self.twist)
         print('fucked stopping')
         return
-      pred_arr = self.predict(bin_img)
+      pred_arr = self.predict_smaller(bin_img)
     pred = np.argmax(pred_arr)
     if self.num_of_crosswalks > 1 and self.num_of_crosswalks != 69:
       # if (pred == 0):
@@ -560,19 +590,31 @@ class image_converter:
 
       self.cmd_vel_pub.publish(self.twist)
     elif self.num_of_crosswalks != 69:
-      next_prob = pred_arr[0][1]
-      p_scaled = min(-0.125/(next_prob - 1.0001), 1.0) #originallly 0.125
-      prev_speed = self.twist.linear.x
-      if (pred == 0):
-        self.twist.linear.x = 0.13
-        self.twist.angular.z = 1.5 #1.3 good before
-      elif (pred == 1):
-        self.twist.linear.x = min(prev_speed + 0.1, p_scaled) #0.6 normally
+      # next_prob = pred_arr[0][1]
+      # p_scaled = min(-0.125/(next_prob - 1.0001), 1.0) #originallly 0.125
+      # prev_speed = self.twist.linear.x
+      # if (pred == 0):
+      #   self.twist.linear.x = 0.13
+      #   self.twist.angular.z = 1.5 #1.3 good before
+      # elif (pred == 1):
+      #   self.twist.linear.x = min(prev_speed + 0.1, p_scaled) #0.6 normally
+      #   self.twist.angular.z = 0.0
+      #   # self.twist.linear.x = 1.0
+      # elif (pred == 2):
+      #   self.twist.linear.x = 0.13
+      #   self.twist.angular.z = -1.5
+      if(self.numberOfPredictions>2):
+        prev_speed = self.twist.linear.x
+        print(prev_speed)
+        straightProb = pred_arr[0][1]
+        leftProb =  pred_arr[0][0]
+        rightProb = pred_arr[0][2]
+        self.twist.linear.x = min((prev_speed + np.power(straightProb,0.3)*2.0)/3, 4)
+        self.twist.angular.z = np.sign(leftProb-rightProb)*np.power(np.abs((leftProb-rightProb)),0.2)*2.0
+      else:
+        self.twist.linear.x = 0.0
         self.twist.angular.z = 0.0
-        # self.twist.linear.x = 1.0
-      elif (pred == 2):
-        self.twist.linear.x = 0.13
-        self.twist.angular.z = -1.5
+        self.numberOfPredictions += 1
       # prev_speed = self.twist.linear.x
       # straightProb = pred_arr[0][1]
       # leftProb =  pred_arr[0][0]
