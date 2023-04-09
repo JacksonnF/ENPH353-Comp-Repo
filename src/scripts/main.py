@@ -61,6 +61,10 @@ class image_converter:
     self.inner_manuever = False
     self.fucked = False
     self.get_to_sand = False
+
+    self.stop_for_truck = False
+
+    self.numberOfPredictions = 0
     
 
 
@@ -329,8 +333,23 @@ class image_converter:
     cx = int(M['m10']/M['m00'])
     cy = int(M['m01']/M['m00'])
     return [cx, cy]
-       
+  
+  def hsvTruck(self, img):
+    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    mask = cv2.inRange(hsv, np.array([0, 0, 47]), 
+                       np.array([0, 0, 60]))  
+    mask2 = cv2.inRange(hsv, np.array([0, 0, 0]), 
+                       np.array([0, 25, 35])) 
+    
+    mask3 = cv2.bitwise_or(mask, mask2)
+    eroded = cv2.erode(mask3, np.ones((3,3), np.uint8), iterations=4)
+    dilated = cv2.dilate(eroded, np.ones((2,2), np.uint8), iterations=35)
+    # eroded2 = cv2.erode(dilated, np.ones((2,2), np.uint8), iterations=5)
+    blurred = cv2.GaussianBlur(dilated, (3, 3), 2)
+    return blurred
 
+  
+  
   
   def callback(self,data):
     if self.start:
@@ -363,7 +382,7 @@ class image_converter:
         return
       if self.inner_manuever:
         self.inner_manuever_func()
-        self.license_plate_pub.publish(str('TeamRed,multi12,-1,XR58'))
+        # self.license_plate_pub.publish(str('TeamRed,multi12,-1,XR58'))
         return
       return
     
@@ -495,24 +514,41 @@ class image_converter:
         self.been_on_sand = 0
         self.loop_count += 1
         return
+      
+    if(self.num_of_crosswalks == 69):
+      truckHSV = self.hsvTruck(cv_image)
+      # cv2.imshow("TruckHSV", truckHSV)
+      # cv2.waitKey(1)
+      truckArea = cv2.countNonZero(truckHSV)
+      # print("Truck Area: ", truckArea)
+    if(self.num_of_crosswalks == 69 and truckArea>12000):
+      self.stop_for_truck = True
+      
+    elif(self.num_of_crosswalks == 69 and truckArea<=12000):
+      self.stop_for_truck = False
     if self.num_of_crosswalks == 69:
+
       bottom_half_rgb = self.crop_for_prediction(cv_image, True)
       pred_arr = self.predict_inner(bottom_half_rgb)
       pred = np.argmax(pred_arr)
-      print(pred)
-      next_prob = pred_arr[0][1]
-      p_scaled = min(-0.125/(next_prob - 1.0001), 0.75) #originallly 0.125
-      prev_speed = self.twist.linear.x
-      if (pred == 0):
-        self.twist.linear.x = 0.1
-        self.twist.angular.z = 1.3 #1.3 good before
-      elif (pred == 1):
-        self.twist.linear.x = min(prev_speed + 0.1, p_scaled) #0.6 normally
-        self.twist.angular.z = 0.0
-        # self.twist.linear.x = 0.36
-      elif (pred == 2):
-        self.twist.linear.x = 0.1
-        self.twist.angular.z = -1.3
+
+      if self.stop_for_truck:
+        predSpeed = 0.0
+        predAngular = 0.0
+        self.twist.linear.x = predSpeed
+        self.twist.angular.z = predAngular
+      else:
+        print(pred)
+        straightProb = pred_arr[0][1]
+        leftProb =  pred_arr[0][0]
+        rightProb = pred_arr[0][2]
+        predSpeed = np.power(straightProb,0.3)*1.75
+        predAngular = np.sign(leftProb-rightProb)*np.power(np.abs((leftProb-rightProb)),0.5)*2.5
+        prev_speed = self.twist.linear.x
+        self.twist.linear.x = (prev_speed + predSpeed)/4
+        # self.twist.linear.x = min(prev_speed + 0.1, np.power(straightProb,0.3)*1.5) #0.6 normally 
+        self.twist.angular.z = predAngular
+
       self.cmd_vel_pub.publish(self.twist)
     
     if self.num_of_crosswalks > 1 and self.num_of_crosswalks != 69:
@@ -553,19 +589,48 @@ class image_converter:
 
       self.cmd_vel_pub.publish(self.twist)
     elif self.num_of_crosswalks != 69:
-      next_prob = pred_arr[0][1]
-      p_scaled = min(-0.125/(next_prob - 1.0001), 1.0) #originallly 0.125
-      prev_speed = self.twist.linear.x
-      if (pred == 0):
-        self.twist.linear.x = 0.1
-        self.twist.angular.z = 1.3 #1.3 good before
-      elif (pred == 1):
-        self.twist.linear.x = min(prev_speed + 0.1, p_scaled) #0.6 normally
+      # next_prob = pred_arr[0][1]
+      # p_scaled = min(-0.125/(next_prob - 1.0001), 1.0) #originallly 0.125
+      # prev_speed = self.twist.linear.x
+      # if (pred == 0):
+      #   self.twist.linear.x = 0.1
+      #   self.twist.angular.z = 1.3 #1.3 good before
+      # elif (pred == 1):
+      #   self.twist.linear.x = min(prev_speed + 0.1, p_scaled) #0.6 normally
+      #   self.twist.angular.z = 0.0
+      #   # self.twist.linear.x = 1.0
+      # elif (pred == 2):
+      #   self.twist.linear.x = 0.1
+      #   self.twist.angular.z = -1.3
+
+      if(self.numberOfPredictions>5):
+        prev_speed = self.twist.linear.x
+        print(prev_speed)
+        straightProb = pred_arr[0][1]
+        leftProb =  pred_arr[0][0]
+        rightProb = pred_arr[0][2]
+        self.twist.linear.x = min((prev_speed + np.power(straightProb,0.3)*1.75)/3, 2)
+        self.twist.angular.z = np.sign(leftProb-rightProb)*np.power(np.abs((leftProb-rightProb)),0.2)*2.0
+      else:
+        self.twist.linear.x = 0.0
         self.twist.angular.z = 0.0
-        # self.twist.linear.x = 1.0
-      elif (pred == 2):
-        self.twist.linear.x = 0.1
-        self.twist.angular.z = -1.3
+
+      self.numberOfPredictions += 1
+
+
+      # predLinear = np.power(straightProb,0.3)*2
+      # if(predLinear > prev_speed):
+      #   self.twist.linear.x = min(prev_speed + 0.1, predLinear)
+      # else:
+      #   self.twist.linear.x = max(prev_speed/3, predLinear)
+      
+     
+      # self.twist.linear.x = min(prev_speed + 0.1, np.power(straightProb,0.3)*1.5) #0.6 normally 
+      
+
+      # self.twist.linear.x = (prev_speed + np.power(straightProb,0.3)*1.75)/3
+      # # self.twist.linear.x = min(prev_speed + 0.1, np.power(straightProb,0.3)*1.5) #0.6 normally 
+      # self.twist.angular.z = np.sign(leftProb-rightProb)*np.power(np.abs((leftProb- rightProb)),0.4)*3.0
 
       self.cmd_vel_pub.publish(self.twist)    
 

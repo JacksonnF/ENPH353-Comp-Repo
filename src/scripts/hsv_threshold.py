@@ -4,7 +4,7 @@ import numpy as np
 import cv2 as cv
 import time
 
-img = cv.imread('/home/fizzer/ros_ws/src/controller_pkg/data/CroppedPlate.png',cv.IMREAD_COLOR)
+img = cv.imread('/home/fizzer/ros_ws/src/controller_pkg/data/truckLeaving.png',cv.IMREAD_COLOR)
 img = cv.medianBlur(img,5)
 
 # Convert BGR to HSV

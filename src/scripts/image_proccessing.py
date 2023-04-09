@@ -29,9 +29,9 @@ class image_converter:
     self.ped_seen_count = 0
     self.state = 0
     
-    self.model = conv_net.ConvNet()
-    self.model.load_state_dict(torch.load("/home/fizzer/ros_ws/src/controller_pkg/data/model_2_pytorch.pth", map_location=torch.device('cpu')))
-    self.model.eval()
+    # self.model = conv_net.ConvNet()
+    # self.model.load_state_dict(torch.load("/home/fizzer/ros_ws/src/controller_pkg/data/model_2_pytorch.pth", map_location=torch.device('cpu')))
+    # self.model.eval()
 
 
   def check_crosswalk_dist(self, img):
@@ -94,9 +94,15 @@ class image_converter:
       cv_image = self.bridge.imgmsg_to_cv2(data, "bgr8")
     except CvBridgeError as e:
       print(e)
-   
-    cv2.imshow("image", cv_image)
-    cv2.waitKey(3)
+    
+    # print(self.predict_pytorch(cv_image))
+    truck = hsvTruck(self, cv_image)
+    cv2.imshow("image", truck)
+    cv2.waitKey(1)
+
+    # sand = hsvSand(self, cv_image)
+    # cv2.imshow("sand", sand)
+    # cv2.waitKey(1)
     
   def predict_pytorch(self, img):
     scale_percent = 20
@@ -122,6 +128,42 @@ class image_converter:
     
     print(time.time() - start_time)
     return outputs
+  
+def hsvInnerLoop(self, img):
+    blurred = cv2.GaussianBlur(img, (3, 3), 2)
+    hsv = cv2.cvtColor(blurred, cv2.COLOR_BGR2HSV)
+
+    mask = cv2.inRange(hsv, np.array([0, 0, 80]), 
+                       np.array([0, 0, 89]))   
+    return mask
+
+def hsvTruck(self, img):
+    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    mask = cv2.inRange(hsv, np.array([0, 0, 47]), 
+                       np.array([0, 0, 60]))  
+    mask2 = cv2.inRange(hsv, np.array([0, 0, 0]), 
+                       np.array([0, 25, 35])) 
+    
+    mask3 = cv2.bitwise_or(mask, mask2)
+    eroded = cv2.erode(mask3, np.ones((3,3), np.uint8), iterations=4)
+    dilated = cv2.dilate(eroded, np.ones((2,2), np.uint8), iterations=30)
+    dilated2 = cv2.dilate(dilated, np.ones((1,1), np.uint8), iterations=200)
+    # eroded2 = cv2.erode(dilated, np.ones((2,2), np.uint8), iterations=5)
+    blurred = cv2.GaussianBlur(dilated, (3, 3), 2)
+    return blurred
+
+
+def hsvSand(self, img):
+   hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+   mask = cv2.inRange(hsv, np.array([13, 72, 91]), 
+                       np.array([37, 166, 183]))  
+   return mask
+
+def calculateStandardDeviation(self, img):
+   # Compute mean and standard deviation along x-axis
+    mean, std_dev = cv2.meanStdDev(img)
+    std_dev_x = np.std(mean, axis=0)
+    return std_dev
 
 
 def main():

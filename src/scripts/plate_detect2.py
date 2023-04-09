@@ -598,6 +598,7 @@ def callback(data):
     global queue2
     global processedPlateStrings
     global plateReadings
+    global skipIsolation
 
     try:
         # Convert ROS Image message to OpenCV image
@@ -636,7 +637,23 @@ def callback(data):
             output3 = predictPlate(queue2Element[0])
             output33 = predictCarNumber(queue2Element[1])
             plateReadings[(int(output33))-1].append(output3)
-    
+
+    if(len(plateReadings[7])>3 and queue1.empty() and queue2.empty() and skipIsolation == False):
+        print(plateReadings)
+        print("")
+        global license_plate_pub    
+        rate = rospy.Rate(8)
+        for i in range(0,len(plateReadings)):
+            if (len(plateReadings[i])!=0):
+                count = collections.Counter(plateReadings[i])
+                most_common = count.most_common(1)
+                print("Plate " + str(i+1) + ": " + most_common[0][0] + ", numImages: " + str(count[most_common[0][0]]))
+                print(str('TeamRed,multi12,'+str(count[most_common[0][0]])+','+most_common[0][0]))
+                license_plate_pub.publish(str('TeamRed,multi12,'+str(i+1)+','+most_common[0][0]))
+                rate.sleep()
+        license_plate_pub.publish(str('TeamRed,multi12,-1,XR58')) 
+        skipIsolation = True
+
 
 def on_press(key):
     global count
@@ -649,22 +666,11 @@ def on_press(key):
     except (AttributeError, ValueError):
         return
 
-    if 7 <= key_num <= 8:
-        print('You pressed {}'.format(key_num))
-        print(licensePlateList)
-        skipIsolation = True
+    # if 7 <= key_num <= 8:
+    #     print('You pressed {}'.format(key_num))
+    #     print(licensePlateList)
+    #     skipIsolation = True
         
-        # print(plateReadings)
-        global license_plate_pub    
-        rate = rospy.Rate(1)
-        for i in range(0,len(plateReadings)):
-            if (len(plateReadings[i])!=0):
-                count = collections.Counter(plateReadings[i])
-                most_common = count.most_common(1)
-                print("Plate " + str(i+1) + ": " + most_common[0][0] + ", numImages: " + str(count[most_common[0][0]]))
-                print(str('TeamRed,multi12,'+str(count[most_common[0][0]])+','+most_common[0][0]))
-                license_plate_pub.publish(str('TeamRed,multi12,'+str(i+1)+','+most_common[0][0]))
-                rate.sleep()
 
     if 1 <= key_num <= 6:
         print('You pressed {}'.format(key_num))
@@ -683,6 +689,8 @@ if __name__ == '__main__':
     global processedPlateStrings
     global skipIsolation
     skipIsolation = False
+    global reportPlates
+    reportPlates = False
     
     global plateReadings
     global license_plate_pub
