@@ -444,6 +444,12 @@ def isolatePlate2(croppedLetters):
     if(len(adjustedRectangles)!=4):
         return None
     # print("adjustedRectangles: ", len(adjustedRectangles))
+    #draw adjustedRectangles on croppedLetters
+    for i in range(0,len(adjustedRectangles)):
+        cv2.rectangle(croppedLetters, adjustedRectangles[i][0], adjustedRectangles[i][2], (0, 255, 0), 2)
+
+    # cv2.imshow("adjustedRectangles", croppedLetters)
+    # cv2.waitKey(1)
     
     if(success4 == True):
         croppedLetters_individual = [None, None, None, None]
@@ -599,6 +605,7 @@ def callback(data):
     global processedPlateStrings
     global plateReadings
     global skipIsolation
+    global endWaitCount
 
     try:
         # Convert ROS Image message to OpenCV image
@@ -690,7 +697,9 @@ if __name__ == '__main__':
     global skipIsolation
     skipIsolation = False
     global reportPlates
-    reportPlates = False
+    reportPlates = False 
+    global endWaitCount
+    endWaitCount = 0
     
     global plateReadings
     global license_plate_pub
