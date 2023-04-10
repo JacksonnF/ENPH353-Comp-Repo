@@ -13,10 +13,9 @@ import time
 from gazebo_msgs.msg import ModelState
 from gazebo_msgs.srv import SetModelState
 import plate_detect as pd
+import math
 
 end_global = False
-global startCommand
-startCommand = False
 
 
 class image_converter:
@@ -33,9 +32,8 @@ class image_converter:
     self.twist.linear.x = 0.0
     self.twist.angular.z = 0.0
     
-    self.start = False
-    self.beforeStart = True
-    self.waitingForStart = False
+
+    self.start = True
     self.end = False
 
     self.finished_manuever = False
@@ -47,6 +45,7 @@ class image_converter:
     self.aligned = 0
     self.see_cross_twice = 0
     self.waiting = 0
+
 
     self.waiting_to_cross = False
     self.crossing = False
@@ -62,7 +61,6 @@ class image_converter:
     self.inner_manuever = False
     self.fucked = False
     self.get_to_sand = False
-    
 
     self.stop_for_truck = False
 
@@ -70,11 +68,8 @@ class image_converter:
 
     self.continueThroughCrosswalk = False
     self.approachingCrosswalk = False
-    self.crossWalk1Time = None
-    self.crossWalk2Time = None
-    self.wait = False
+    self.pedestrianMiddleTime = None
 
-    self.tempTime = None
 
 
     # Stuff for pedestrian routine
@@ -178,16 +173,6 @@ class image_converter:
     eroded = cv2.erode(mask, np.ones((2, 2), np.uint8), iterations=1)
     dilated = cv2.dilate(eroded, np.ones((3, 3), np.uint8), iterations=3)
     return dilated
-  
-  # def hsvCrosswalk(self,img):
-  #   filtered = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-  #   mask = cv2.inRange(filtered, np.array([0, 52, 128]), np.array([0, 255, 255]))
-  #   mask2 = cv2.inRange(filtered, np.array([0, 3, 116]), np.array([16, 255, 255]))
-  #   eroded = cv2.erode(mask2, np.ones((2, 2), np.uint8), iterations=1)
-  #   dilated = cv2.dilate(eroded, np.ones((3, 3), np.uint8), iterations=3)
-  #   dilateHorizontally = cv2.dilate(dilated, np.ones((1, 3), np.uint8), iterations=10)
-  #   erodeHorizontally = cv2.erode(dilateHorizontally, np.ones((1, 3), np.uint8), iterations=10)
-  #   return erodeHorizontally
 
   def check_crosswalk_dist(self, img):
     # filtered = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
@@ -206,7 +191,7 @@ class image_converter:
       return (0, 0)
   
   def check_if_approaching_crosswalk(self, area1):
-    if(600<area1<2200):
+    if(100<area1<2200):
             self.approachingCrosswalk = True
     else:
             self.approachingCrosswalk = False
@@ -219,6 +204,17 @@ class image_converter:
     if(crossWalkXmin < pedestrianX < crossWalkXmax):
         self.continueThroughCrosswalk = True
         print("continue through crosswalk")
+    return
+  
+  def check_pedestrian_walking2(self, img):
+    pedestrian = self.hsv_pedestrian(img)
+    pedestrianContours = self.contour_pedestrian(pedestrian)
+    pedestrianX, pedestrianY = self.find_contour_centroid(pedestrianContours[0])
+    crossWalkXmin, crossWalkXmax = self.find_crosswalk_x_extrema(img)
+    averageCrossWalkX = (crossWalkXmin + crossWalkXmax)/2
+    if(averageCrossWalkX-3<pedestrianX<averageCrossWalkX+3):
+      self.pedestrianMiddleTime = time.time()
+      print("Pedestrian time initialized")
     return
   
   def find_crosswalk_x_extrema(self, img):
@@ -435,34 +431,19 @@ class image_converter:
   
   
   def callback(self,data):
-    global startCommand
 
-    if self.beforeStart:
-      self.beforeStart = False
-      self.waitingForStart = True
-      self.spawn_position(-0.85, 0 , 0.5, 0,0,1,0)
-      return
-    
-    if self.waitingForStart:
-      cv2.waitKey(1)
-      if(startCommand):
-         self.start = True
-         self.waitingForStart = False
-      return
 
     cv2.waitKey(1)
     if self.start:
-      if(type(self.tempTime) == type(None)):
-        self.tempTime = time.time()
-      if(time.time()-self.tempTime>2.7):
-        self.license_plate_pub.publish(str('TeamRed,multi12,0,XR58'))
-        self.initial_turn()
-        print('here')
-        self.start = False
-        cv_image = self.bridge.imgmsg_to_cv2(data, "bgr8")
-        self.prev_img = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
-        self.start_time = time.time()
-      return
+      self.spawn_position(-0.85, 0 , 0.5, 0,0,1,0)
+      self.license_plate_pub.publish(str('TeamRed,multi12,0,XR58'))
+      time.sleep(0.5)
+      self.initial_turn()
+      print('here')
+      self.start = False
+      cv_image = self.bridge.imgmsg_to_cv2(data, "bgr8")
+      self.prev_img = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
+      self.start_time = time.time()
     try:
       cv_image = self.bridge.imgmsg_to_cv2(data, "bgr8")
     except CvBridgeError as e:
@@ -556,7 +537,6 @@ class image_converter:
         self.waiting_to_cross = False
         self.crossing = True
         self.continueThroughCrosswalk = False
-      
           
       return
     
@@ -614,27 +594,23 @@ class image_converter:
       return
 
     
-    # ------------------------------------------------------
     areas = self.check_crosswalk_dist(cv_image)
     self.check_if_approaching_crosswalk(areas[0])
-    if(self.approachingCrosswalk and self.num_of_crosswalks==0):
+    if(self.approachingCrosswalk and self.pedestrianMiddleTime == None):
       print('approaching crosswalk')
-      self.check_pedestrian_walking(cv_image)
+      self.check_pedestrian_walking2(cv_image)
 
-    #FIX CASE WHEN SECOND CROSSWALK CAN CONTINUE
-    if(type(self.crossWalk1Time)==type(None)):
-      self.wait = False
-    elif((self.crossWalk1Time-time.time())<1):
-      self.wait = True
-    else:
-      self.wait = False
+    if(self.pedestrianMiddleTime != None):
+      modulus = math.fmod(time.time()-self.pedestrianMiddleTime,4)
+      if(modulus<0.15 or modulus >3.85):
+        print("Pedestrian Center")
+
 
     if len(areas) > 1:
       # print(areas)
-      if areas[0] > 2500 and areas[1]>75 and time.time()-self.start_time>1 and not self.continueThroughCrosswalk and not self.wait and (type(self.crossWalk1Time) == type(None) or time.time()-self.crossWalk1Time>1):
+      if areas[0] > 2500 and areas[1]>75 and time.time()-self.start_time>1:
         # self.align_robot(cv_image)
-        print("test1")
-        self.crossWalk1Time = time.time()
+        
         self.twist.linear.x = 0.0
         self.twist.angular.z = 0.0
         self.cmd_vel_pub.publish(self.twist)
@@ -650,18 +626,6 @@ class image_converter:
           self.area_seen_twice = 0
         # self.waiting_to_cross = True
         return
-      if areas[0] > 2500 and areas[1]>75 and time.time()-self.start_time>1 and self.continueThroughCrosswalk and self.num_of_crosswalks == 0:
-        # self.align_robot(cv_image)
-        self.crossWalk1Time = time.time()
-        self.num_of_crosswalks = 1
-        self.continueThroughCrosswalk = False
-        
-
-        
-        
-
-        return
-      
       # elif areas[0] > 2500 and areas[1]>75 and time.time()-self.start_time>1 and self.continueThroughCrosswalk:
       #   self.crossing = True
       #   self.continueThroughCrosswalk = False
@@ -955,7 +919,6 @@ class image_converter:
     
 def on_press(key):
     global end_global
-    global startCommand
     try:
         if key.char == 'n':
           print('here')
@@ -963,12 +926,6 @@ def on_press(key):
     except AttributeError:
         print('special key {0} pressed'.format(
             key))
-        
-    if(key.char == "g"):
-      print("g pressed")
-      startCommand = True
-       
-    
 
 def on_release(key):
     if key == keyboard.Key.esc:
