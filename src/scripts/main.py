@@ -381,9 +381,9 @@ class image_converter:
   def callback(self,data):
     if self.start:
       self.spawn_position(-0.85, 0 , 0.5, 0,0,1,0)
+      self.license_plate_pub.publish(str('TeamRed,multi12,0,XR58'))
       self.initial_turn()
       print('here')
-      self.license_plate_pub.publish(str('TeamRed,multi12,0,XR58'))
       self.start = False
       cv_image = self.bridge.imgmsg_to_cv2(data, "bgr8")
       self.prev_img = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
@@ -499,7 +499,7 @@ class image_converter:
       return
     
     if self.get_to_sand:
-      self.twist.linear.x = 0.5
+      self.twist.linear.x = 0.8
       self.twist.angular.z = 0.0
       self.cmd_vel_pub.publish(self.twist)
       area = self.check_for_sand_start(cv_image)
@@ -573,7 +573,7 @@ class image_converter:
         predSpeed = np.power(straightProb,0.3)*1.75
         predAngular = np.sign(leftProb-rightProb)*np.power(np.abs((leftProb-rightProb)),0.5)*2.5
         prev_speed = self.twist.linear.x
-        self.twist.linear.x = (prev_speed + predSpeed)/4
+        self.twist.linear.x = (prev_speed + predSpeed)/3.9 #4 originally
         # self.twist.linear.x = min(prev_speed + 0.1, np.power(straightProb,0.3)*1.5) #0.6 normally 
         self.twist.angular.z = predAngular
 
