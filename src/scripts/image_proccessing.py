@@ -47,49 +47,16 @@ class image_converter:
     except CvBridgeError as e:
       print(e)
 
-        # Apply a color threshold to the image to detect the pedestrian
-    hsv = cv2.cvtColor(cv_image, cv2.COLOR_BGR2HSV)
-
-    mask = cv2.inRange(hsv, np.array([92,106,43]), np.array([106,151,52]))
-    # cv2.imshow('Pedestrian Tracker', mask)
-    # cv2.waitKey(1)
-
-    # Detect the blobs in the binary image
-    keypoints = self.detector.detect(mask)
-    # print(keypoints)
-
-    # If at least one blob is detected, track the pedestrian
-    if len(keypoints) > 0:
-        # Get the centroid of the first blob
-        centroid = keypoints[0].pt
-
-        # Draw a circle around the pedestrian
-        cv2.circle(cv_image, (int(centroid[0]), int(centroid[1])), int(keypoints[0].size/2), (0, 255, 0), 2)
-
-        # If this is the first frame or the previous centroid is not available, set the previous centroid to the current centroid and the previous time to the current time
-        if self.prev_centroid is None:
-            self.prev_centroid = centroid
-            self.prev_time = time.time()
-        else:
-            # Calculate the distance between the current centroid and the previous centroid
-            dist = np.sqrt((centroid[0]-self.prev_centroid[0])**2 + (centroid[1]-self.prev_centroid[1])**2)
-
-            # Calculate the time difference between the current frame and the previous frame
-            time_diff = time.time() - self.prev_time
-
-            # Calculate the velocity of the pedestrian
-            velocity = dist / time_diff
-
-            # Publish the velocity to a ROS topic
-            print(velocity)
-
-            # Set the previous centroid to the current centroid and the previous time to the current time
-            self.prev_centroid = centroid
-            self.prev_time = time.time()
-
-    # Display the image with the pedestrian and the velocity estimation
- 
-  
+    w = cv_image.shape[1]
+    h = cv_image.shape[0]
+    cropped_img = cv_image[h-240:h, 0:w]
+    blur = cv2.GaussianBlur(cropped_img, (5, 5), 0)
+    filtered = cv2.cvtColor(blur, cv2.COLOR_BGR2HSV)
+    mask = cv2.inRange(filtered, np.array([13, 72, 91]), np.array([37, 166, 183]))
+    area = cv2.countNonZero(mask)
+    print(area)
+    cv2.imshow("Image window", mask)
+    cv2.waitKey(3)
 
 
 def main():
