@@ -194,7 +194,7 @@ class image_converter:
       return (0, 0)
   
   def check_if_approaching_crosswalk(self, area1):
-    if(600<area1<2200):
+    if(600<area1<2000):
             self.approachingCrosswalk = True
     else:
             self.approachingCrosswalk = False
@@ -654,7 +654,7 @@ class image_converter:
       leftProb =  pred_arr[0][0]
       rightProb = pred_arr[0][2]
       predSpeed = np.power(straightProb,0.3)*2.25
-      predAngular = np.sign(leftProb-rightProb)*np.power(np.abs((leftProb-rightProb)),0.75)*4.5
+      predAngular = np.sign(leftProb-rightProb)*np.power(np.abs((leftProb-rightProb)),0.80)*4.75
       prev_speed = self.twist.linear.x
       self.twist.linear.x = (prev_speed + predSpeed)/3.7
       self.twist.angular.z = predAngular
