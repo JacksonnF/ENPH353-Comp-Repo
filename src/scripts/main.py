@@ -558,7 +558,7 @@ class image_converter:
     
     # ------------------------------------------------------
     areas = self.check_crosswalk_dist(cv_image)
-    if time.time() - self.last_cross_time > 1:
+    if time.time() - self.last_cross_time > 2.5:
       self.check_if_approaching_crosswalk(areas[0])
       if(self.approachingCrosswalk and self.robot_state == 0):
         print('approaching crosswalk')
