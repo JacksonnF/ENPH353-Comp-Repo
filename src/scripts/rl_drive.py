@@ -37,7 +37,7 @@ class data_collector:
     self.drive_imgs_gray = []
     self.drive_imgs_rgb = []
     self.vel_cmds = []
-    self.flag = 112
+    self.flag = 132
     # self.model = keras.models.load_model('/home/fizzer/ros_ws/src/controller_pkg/data/model_20000a.h5') #model 20 is the best one
     # self.interpreter = tf.lite.Interpreter(model_path="/home/fizzer/ros_ws/src/controller_pkg/data/model_2000c_quantized.tflite")
     listener = keyboard.Listener(
@@ -116,7 +116,7 @@ class data_collector:
     
     global spawn_at_start
     if spawn_at_start:
-      self.spawn_position(-0.85, 0.0, 0.8, 0,0,0,1)
+      self.spawn_position(-0.85, 0.0, 0.8, 0,0,1,0)
       # self.initial_turn()
       spawn_at_start = False
     
@@ -159,11 +159,11 @@ class data_collector:
     if (depressed == 1):
        print('saving')
        depressed = 0
-       np.save('/home/fizzer/ros_ws/src/controller_pkg/data/adding_outer_data/data_vels'+str(self.flag)+
+       np.save('/home/fizzer/ros_ws/src/controller_pkg/data/fine_tuned/data_vels'+str(self.flag)+
                '.npy', self.vel_cmds)
-       np.savez_compressed('/home/fizzer/ros_ws/src/controller_pkg/data/adding_outer_data/img_gray_comp'
+       np.savez_compressed('/home/fizzer/ros_ws/src/controller_pkg/data/fine_tuned/img_gray_comp'
                            +str(self.flag)+'.npz', *self.drive_imgs_gray)
-       np.savez_compressed('/home/fizzer/ros_ws/src/controller_pkg/data/adding_outer_data/img_rgb_comp'
+       np.savez_compressed('/home/fizzer/ros_ws/src/controller_pkg/data/fine_tuned/img_rgb_comp'
                            +str(self.flag)+'.npz', *self.drive_imgs_rgb)
        print('saved')
        recording = False

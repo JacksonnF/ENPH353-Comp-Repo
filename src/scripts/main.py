@@ -222,7 +222,7 @@ class image_converter:
   def predict_smaller(self, img):
     img_aug = np.expand_dims(img, axis=0)
     input_data = np.array(img_aug, dtype=np.float32)
-    interpreter = tf.lite.Interpreter(model_path="/home/fizzer/ros_ws/src/controller_pkg/data/model_99b_quantized.tflite")
+    interpreter = tf.lite.Interpreter(model_path="/home/fizzer/ros_ws/src/controller_pkg/data/model_99b_quantized.tflite") #model_99b_quantized best
     interpreter.allocate_tensors()
     input_index = interpreter.get_input_details()[0]["index"]
     interpreter.set_tensor(input_index, input_data)
@@ -531,8 +531,8 @@ class image_converter:
           straightProb = pred_arr[0][1]
           leftProb =  pred_arr[0][0]
           rightProb = pred_arr[0][2]
-          self.twist.linear.x = min((prev_speed + np.power(straightProb,0.3)*2.0)/3, 4.0) #2.0, 4
-          self.twist.angular.z = np.sign(leftProb-rightProb)*np.power(np.abs((leftProb-rightProb)),0.32)*3.0
+          self.twist.linear.x = min((prev_speed + np.power(straightProb,0.3)*2.0)/3, 4.0)/1.25 #2.0, 4
+          self.twist.angular.z = np.sign(leftProb-rightProb)*np.power(np.abs((leftProb-rightProb)),0.32)*3.0/1.25
           self.cmd_vel_pub.publish(self.twist)
         return
     
@@ -544,15 +544,16 @@ class image_converter:
       straightProb = pred_arr[0][1]
       leftProb =  pred_arr[0][0]
       rightProb = pred_arr[0][2]
-      self.twist.linear.x = min((prev_speed + np.power(straightProb,0.3)*2.0)/3, 4.0) #2.0, 4
-      self.twist.angular.z = np.sign(leftProb-rightProb)*np.power(np.abs((leftProb-rightProb)),0.32)*3.0
+      self.twist.linear.x = min((prev_speed + np.power(straightProb,0.3)*2.0)/3, 4.0)/1.2 #2.0, 4
+      self.twist.angular.z = np.sign(leftProb-rightProb)*np.power(np.abs((leftProb-rightProb)),0.32)*3.0/1.2
       self.cmd_vel_pub.publish(self.twist)
       area = self.check_for_sand_start(cv_image)
       print(area)
-      if area > 200000:
+      if area > 150000:
         self.get_to_sand = False
         self.robot_state = 1
         self.waiting_to_cross = False
+        self.twist.linear.x = 0.5 #so that prev speed is not too crazy
       return
 
     
@@ -572,28 +573,29 @@ class image_converter:
     else:
       self.wait = False
 
-    if len(areas) > 1:
-      #CASE 1: STOP AT CROSSWALK
-      if areas[0] > 2500 and areas[1]>75 and time.time()-self.start_time>1 and not self.continueThroughCrosswalk:
-        print("stop at crosswalk")
-        self.crossWalk1Time = time.time()
-        self.twist.linear.x = 0.0
-        self.twist.angular.z = 0.0
-        self.cmd_vel_pub.publish(self.twist)
-        self.stop_at_crosswalk = True
-          
-        self.area_seen_twice = 0
-        self.stop_at_crosswalk = True
-        self.area_seen_twice = 0
-        return
-      #CASE 2: CONTINUE THROUGH CROSSWALK
-      if areas[0] > 2500 and areas[1]>75 and time.time()-self.start_time>1 and self.continueThroughCrosswalk and self.robot_state == 0:
-        print('continue through crosswalk')
-        self.crossWalk1Time = time.time()
-        self.continueThroughCrosswalk = False
-        self.waiting_to_cross = False
-        self.crossing = True
-        return
+    if time.time() - self.last_cross_time > 2:
+      if len(areas) > 1:
+        #CASE 1: STOP AT CROSSWALK
+        if areas[0] > 2500 and areas[1]>75 and time.time()-self.start_time>1 and not self.continueThroughCrosswalk:
+          print("stop at crosswalk")
+          self.crossWalk1Time = time.time()
+          self.twist.linear.x = 0.0
+          self.twist.angular.z = 0.0
+          self.cmd_vel_pub.publish(self.twist)
+          self.stop_at_crosswalk = True
+            
+          self.area_seen_twice = 0
+          self.stop_at_crosswalk = True
+          self.area_seen_twice = 0
+          return
+        #CASE 2: CONTINUE THROUGH CROSSWALK
+        if areas[0] > 2500 and areas[1]>75 and time.time()-self.start_time>1 and self.continueThroughCrosswalk and self.robot_state == 0:
+          print('continue through crosswalk')
+          self.crossWalk1Time = time.time()
+          self.continueThroughCrosswalk = False
+          self.waiting_to_cross = False
+          self.crossing = True
+          return
 
     #Check if sand has ended
     if self.robot_state == 1:
@@ -645,6 +647,7 @@ class image_converter:
       bin_img = cv2.resize(cv2.resize(img, (128,36), interpolation=cv2.INTER_AREA), (64,36), interpolation=cv2.INTER_AREA)
       if np.mean(bin_img) == 0.0:
         self.fucked = True
+        print('fucked')
         return
       pred_arr = self.predict_smaller(bin_img)
     pred = np.argmax(pred_arr)
@@ -669,8 +672,7 @@ class image_converter:
         leftProb =  pred_arr[0][0]
         rightProb = pred_arr[0][2]
         self.twist.linear.x = min((prev_speed + np.power(straightProb,0.3)*2.0)/2.75, 4.25) #2.0, 4
-        self.twist.angular.z = np.sign(leftProb-rightProb)*np.power(np.abs((leftProb-rightProb)),0.45)*3.1/prev_speed/2
-
+        self.twist.angular.z = np.sign(leftProb-rightProb)*np.power(np.abs((leftProb-rightProb)),0.45)*3.1/(0.1+prev_speed)/2
 
       else:
         self.twist.linear.x = 0.0
