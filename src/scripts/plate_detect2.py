@@ -638,7 +638,7 @@ def callback(data):
             output33 = predictCarNumber(queue2Element[1])
             plateReadings[(int(output33))-1].append(output3)
 
-    if(len(plateReadings[7])>3 and queue1.empty() and queue2.empty() and skipIsolation == False):
+    if(len(plateReadings[7])>2 and queue1.empty() and queue2.empty() and skipIsolation == False):
         print(plateReadings)
         print("")
         global license_plate_pub    

@@ -654,7 +654,7 @@ class image_converter:
       leftProb =  pred_arr[0][0]
       rightProb = pred_arr[0][2]
       predSpeed = np.power(straightProb,0.3)*2.25
-      predAngular = np.sign(leftProb-rightProb)*np.power(np.abs((leftProb-rightProb)),0.65)*4.0
+      predAngular = np.sign(leftProb-rightProb)*np.power(np.abs((leftProb-rightProb)),0.75)*4.5
       prev_speed = self.twist.linear.x
       self.twist.linear.x = (prev_speed + predSpeed)/3.7
       self.twist.angular.z = predAngular
@@ -669,7 +669,7 @@ class image_converter:
         leftProb =  pred_arr[0][0]
         rightProb = pred_arr[0][2]
         self.twist.linear.x = min((prev_speed + np.power(straightProb,0.3)*2.0)/2.75, 4.25) #2.0, 4
-        self.twist.angular.z = np.sign(leftProb-rightProb)*np.power(np.abs((leftProb-rightProb)),0.55)*3.1/prev_speed/2
+        self.twist.angular.z = np.sign(leftProb-rightProb)*np.power(np.abs((leftProb-rightProb)),0.45)*3.1/prev_speed/2
 
 
       else:
