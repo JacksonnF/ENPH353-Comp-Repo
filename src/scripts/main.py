@@ -512,6 +512,7 @@ class image_converter:
       if self.num_of_crosswalks == 1:
          self.get_to_sand = True
          self.crossing = False
+         self.twist.linear.x = 0.5
          return
       contours = self.check_crosswalk_dist(cv_image)
       if contours[0] < 150 and contours[1] < 150:
@@ -572,28 +573,29 @@ class image_converter:
     else:
       self.wait = False
 
-    if len(areas) > 1:
-      #CASE 1: STOP AT CROSSWALK
-      if areas[0] > 2500 and areas[1]>75 and time.time()-self.start_time>1 and not self.continueThroughCrosswalk:
-        print("stop at crosswalk")
-        self.crossWalk1Time = time.time()
-        self.twist.linear.x = 0.0
-        self.twist.angular.z = 0.0
-        self.cmd_vel_pub.publish(self.twist)
-        self.stop_at_crosswalk = True
-          
-        self.area_seen_twice = 0
-        self.stop_at_crosswalk = True
-        self.area_seen_twice = 0
-        return
-      #CASE 2: CONTINUE THROUGH CROSSWALK
-      if areas[0] > 2500 and areas[1]>75 and time.time()-self.start_time>1 and self.continueThroughCrosswalk and self.robot_state == 0:
-        print('continue through crosswalk')
-        self.crossWalk1Time = time.time()
-        self.continueThroughCrosswalk = False
-        self.waiting_to_cross = False
-        self.crossing = True
-        return
+    if time.time() - self.last_cross_time > 2.5:
+      if len(areas) > 1:
+        #CASE 1: STOP AT CROSSWALK
+        if areas[0] > 2500 and areas[1]>75 and time.time()-self.start_time>1 and not self.continueThroughCrosswalk:
+          print("stop at crosswalk")
+          self.crossWalk1Time = time.time()
+          self.twist.linear.x = 0.0
+          self.twist.angular.z = 0.0
+          self.cmd_vel_pub.publish(self.twist)
+          self.stop_at_crosswalk = True
+            
+          self.area_seen_twice = 0
+          self.stop_at_crosswalk = True
+          self.area_seen_twice = 0
+          return
+        #CASE 2: CONTINUE THROUGH CROSSWALK
+        if areas[0] > 2500 and areas[1]>75 and time.time()-self.start_time>1 and self.continueThroughCrosswalk and self.robot_state == 0:
+          print('continue through crosswalk')
+          self.crossWalk1Time = time.time()
+          self.continueThroughCrosswalk = False
+          self.waiting_to_cross = False
+          self.crossing = True
+          return
 
     #Check if sand has ended
     if self.robot_state == 1:
