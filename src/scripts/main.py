@@ -526,7 +526,7 @@ class image_converter:
       if self.num_of_crosswalks == 1:
          self.get_to_sand = True
          self.crossing = False
-         self.twist.linear.x = 0.5
+        #  self.twist.linear.x = 0.5
          return
       contours = self.check_crosswalk_dist(cv_image)
       if contours[0] < 150 and contours[1] < 150:
@@ -667,25 +667,25 @@ class image_converter:
     pred = np.argmax(pred_arr)
 
     if self.robot_state == 1:
-      # straightProb = pred_arr[0][1]
-      # leftProb =  pred_arr[0][0]
-      # rightProb = pred_arr[0][2]
-      # predSpeed = np.power(straightProb,0.3)*2.25
-      # predAngular = np.sign(leftProb-rightProb)*np.power(np.abs((leftProb-rightProb)),0.8)*4.25
-      # prev_speed = self.twist.linear.x
-      # self.twist.linear.x = (prev_speed + predSpeed)/3.75
-      # self.twist.angular.z = predAngular
-      # self.cmd_vel_pub.publish(self.twist)
-      # print(self.twist.linear.x)
       straightProb = pred_arr[0][1]
       leftProb =  pred_arr[0][0]
       rightProb = pred_arr[0][2]
       predSpeed = np.power(straightProb,0.3)*2.25
-      predAngular = np.sign(leftProb-rightProb)*np.power(np.abs((leftProb-rightProb)),0.80)*4.75
+      predAngular = np.sign(leftProb-rightProb)*np.power(np.abs((leftProb-rightProb)),0.8)*4.25
       prev_speed = self.twist.linear.x
-      self.twist.linear.x = (prev_speed + predSpeed)/3.7
+      self.twist.linear.x = (prev_speed + predSpeed)/3.75
       self.twist.angular.z = predAngular
       self.cmd_vel_pub.publish(self.twist)
+      # print(self.twist.linear.x)
+      # straightProb = pred_arr[0][1]
+      # leftProb =  pred_arr[0][0]
+      # rightProb = pred_arr[0][2]
+      # predSpeed = np.power(straightProb,0.3)*2.25
+      # predAngular = np.sign(leftProb-rightProb)*np.power(np.abs((leftProb-rightProb)),0.80)*4.75
+      # prev_speed = self.twist.linear.x
+      # self.twist.linear.x = (prev_speed + predSpeed)/3.7
+      # self.twist.angular.z = predAngular
+      # self.cmd_vel_pub.publish(self.twist)
     elif self.robot_state == 0:
       if(self.numberOfPredictions>2):
         prev_speed = self.twist.linear.x
@@ -694,7 +694,7 @@ class image_converter:
         rightProb = pred_arr[0][2]
         self.twist.linear.x = min((prev_speed + np.power(straightProb,0.3)*2.0)/3, 4.0) #2.0, 4
         self.twist.angular.z = np.sign(leftProb-rightProb)*np.power(np.abs((leftProb-rightProb)),0.32)*3.0
-        print(self.twist.linear.x)
+        # print(self.twist.linear.x)
 
       else:
         self.twist.linear.x = 0.0
