@@ -646,7 +646,7 @@ class image_converter:
         leftProb =  pred_arr[0][0]
         rightProb = pred_arr[0][2]
         predSpeed = np.power(straightProb,0.3)*1.75
-        predAngular = np.sign(leftProb-rightProb)*np.power(np.abs((leftProb-rightProb)),0.5)*3.0
+        predAngular = np.sign(leftProb-rightProb)*np.power(np.abs((leftProb-rightProb)),0.7)*3.0 #from 0.5 to 0.7
         prev_speed = self.twist.linear.x
         self.twist.linear.x = (prev_speed + predSpeed)/3.5 #4 originally
         self.twist.angular.z = predAngular
@@ -654,8 +654,8 @@ class image_converter:
     
     if self.robot_state == 1:
       bottom_half_rgb = self.crop_for_prediction(cv_image, True)
-      bottom_half_rgb = cv2.resize(cv2.resize(bottom_half_rgb, (128,36), interpolation=cv2.INTER_AREA), (64,36), interpolation=cv2.INTER_AREA)
-      pred_arr = self.predict_smaller_sand(bottom_half_rgb)
+      # bottom_half_rgb = cv2.resize(cv2.resize(bottom_half_rgb, (128,36), interpolation=cv2.INTER_AREA), (64,36), interpolation=cv2.INTER_AREA)
+      pred_arr = self.predict_sand(bottom_half_rgb)
       self.been_on_sand += 1
     elif self.robot_state == 0:
       img = self.crop_for_prediction(cv_image, True)
@@ -667,16 +667,25 @@ class image_converter:
     pred = np.argmax(pred_arr)
 
     if self.robot_state == 1:
+      # straightProb = pred_arr[0][1]
+      # leftProb =  pred_arr[0][0]
+      # rightProb = pred_arr[0][2]
+      # predSpeed = np.power(straightProb,0.3)*2.25
+      # predAngular = np.sign(leftProb-rightProb)*np.power(np.abs((leftProb-rightProb)),0.8)*4.25
+      # prev_speed = self.twist.linear.x
+      # self.twist.linear.x = (prev_speed + predSpeed)/3.75
+      # self.twist.angular.z = predAngular
+      # self.cmd_vel_pub.publish(self.twist)
+      # print(self.twist.linear.x)
       straightProb = pred_arr[0][1]
       leftProb =  pred_arr[0][0]
       rightProb = pred_arr[0][2]
       predSpeed = np.power(straightProb,0.3)*2.25
-      predAngular = np.sign(leftProb-rightProb)*np.power(np.abs((leftProb-rightProb)),0.8)*4.25
+      predAngular = np.sign(leftProb-rightProb)*np.power(np.abs((leftProb-rightProb)),0.80)*4.75
       prev_speed = self.twist.linear.x
-      self.twist.linear.x = (prev_speed + predSpeed)/3.75
+      self.twist.linear.x = (prev_speed + predSpeed)/3.7
       self.twist.angular.z = predAngular
       self.cmd_vel_pub.publish(self.twist)
-      print(self.twist.linear.x)
     elif self.robot_state == 0:
       if(self.numberOfPredictions>2):
         prev_speed = self.twist.linear.x

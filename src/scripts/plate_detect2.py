@@ -599,6 +599,7 @@ def callback(data):
     global processedPlateStrings
     global plateReadings
     global skipIsolation
+    global firstPlate8Time
 
     try:
         # Convert ROS Image message to OpenCV image
@@ -636,9 +637,11 @@ def callback(data):
             queue2Element = queue2.get()
             output3 = predictPlate(queue2Element[0])
             output33 = predictCarNumber(queue2Element[1])
+            if (int(output33) == 8 and type(firstPlate8Time)==type(None)):
+                firstPlate8Time = time.time()
             plateReadings[(int(output33))-1].append(output3)
 
-    if(len(plateReadings[7])>3 and queue1.empty() and queue2.empty() and skipIsolation == False):
+    if(len(plateReadings[7])>3 and queue1.empty() and queue2.empty() and skipIsolation == False and type(firstPlate8Time)!=type(None) and time.time()-firstPlate8Time>1):
         print(plateReadings)
         print("")
         global license_plate_pub    
@@ -691,10 +694,13 @@ if __name__ == '__main__':
     skipIsolation = False
     global reportPlates
     reportPlates = False
+    global firstPlate8Time
     
     global plateReadings
     global license_plate_pub
     plateReadings = [[],[],[],[],[],[], [], []]
+
+    firstPlate8Time = None
 
     processedPlateStrings = []
     queue1 = queue.Queue()
