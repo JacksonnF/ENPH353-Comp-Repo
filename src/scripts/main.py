@@ -222,7 +222,7 @@ class image_converter:
   def predict_smaller(self, img):
     img_aug = np.expand_dims(img, axis=0)
     input_data = np.array(img_aug, dtype=np.float32)
-    interpreter = tf.lite.Interpreter(model_path="/home/fizzer/ros_ws/src/controller_pkg/data/model_god_100_quantized.tflite") #99b best
+    interpreter = tf.lite.Interpreter(model_path="/home/fizzer/ros_ws/src/controller_pkg/data/model_99b_quantized.tflite") #99b best
     interpreter.allocate_tensors()
     input_index = interpreter.get_input_details()[0]["index"]
     interpreter.set_tensor(input_index, input_data)
@@ -559,7 +559,7 @@ class image_converter:
       straightProb = pred_arr[0][1]
       leftProb =  pred_arr[0][0]
       rightProb = pred_arr[0][2]
-      self.twist.linear.x = min((prev_speed + np.power(straightProb,0.3)*2.0)/3, 4.0)/1.15 #2.0, 4
+      self.twist.linear.x = min((prev_speed + np.power(straightProb,0.3)*2.0)/3, 4.0)/1.1 #2.0, 4
       self.twist.angular.z = np.sign(leftProb-rightProb)*np.power(np.abs((leftProb-rightProb)),0.32)*3.0
       self.cmd_vel_pub.publish(self.twist)
       area = self.check_for_sand_start(cv_image)
@@ -614,7 +614,7 @@ class image_converter:
     #Check if sand has ended
     if self.robot_state == 1:
       road_area = self.check_for_sand_end(cv_image)
-      print(road_area, self.been_on_sand)
+      # print(road_area, self.been_on_sand)
       if road_area > 10000 and self.been_on_sand > 25:
         self.twist.linear.x = 0.0
         self.twist.angular.z = 0.0
@@ -654,8 +654,8 @@ class image_converter:
     
     if self.robot_state == 1:
       bottom_half_rgb = self.crop_for_prediction(cv_image, True)
-      # bottom_half_rgb = cv2.resize(cv2.resize(bottom_half_rgb, (128,36), interpolation=cv2.INTER_AREA), (64,36), interpolation=cv2.INTER_AREA)
-      pred_arr = self.predict_sand(bottom_half_rgb)
+      bottom_half_rgb = cv2.resize(cv2.resize(bottom_half_rgb, (128,36), interpolation=cv2.INTER_AREA), (64,36), interpolation=cv2.INTER_AREA)
+      pred_arr = self.predict_smaller_sand(bottom_half_rgb)
       self.been_on_sand += 1
     elif self.robot_state == 0:
       img = self.crop_for_prediction(cv_image, True)
@@ -704,7 +704,7 @@ class image_converter:
       self.cmd_vel_pub.publish(self.twist)  
         
   def initial_turn(self):
-    time.sleep(1.0)
+    time.sleep(0.1)
     self.twist.linear.x = 0.7
     self.twist.angular.z = 2.4
     self.cmd_vel_pub.publish(self.twist)
