@@ -194,7 +194,7 @@ class image_converter:
       return (0, 0)
   
   def check_if_approaching_crosswalk(self, area1):
-    if(600<area1<2200):
+    if(600<area1<1900):
             self.approachingCrosswalk = True
     else:
             self.approachingCrosswalk = False
@@ -222,7 +222,7 @@ class image_converter:
   def predict_smaller(self, img):
     img_aug = np.expand_dims(img, axis=0)
     input_data = np.array(img_aug, dtype=np.float32)
-    interpreter = tf.lite.Interpreter(model_path="/home/fizzer/ros_ws/src/controller_pkg/data/model_99b_quantized.tflite")
+    interpreter = tf.lite.Interpreter(model_path="/home/fizzer/ros_ws/src/controller_pkg/data/model_god_100_quantized.tflite") #99b best
     interpreter.allocate_tensors()
     input_index = interpreter.get_input_details()[0]["index"]
     interpreter.set_tensor(input_index, input_data)
@@ -559,12 +559,12 @@ class image_converter:
       straightProb = pred_arr[0][1]
       leftProb =  pred_arr[0][0]
       rightProb = pred_arr[0][2]
-      self.twist.linear.x = min((prev_speed + np.power(straightProb,0.3)*2.0)/3, 4.0) #2.0, 4
+      self.twist.linear.x = min((prev_speed + np.power(straightProb,0.3)*2.0)/3, 4.0)/1.15 #2.0, 4
       self.twist.angular.z = np.sign(leftProb-rightProb)*np.power(np.abs((leftProb-rightProb)),0.32)*3.0
       self.cmd_vel_pub.publish(self.twist)
       area = self.check_for_sand_start(cv_image)
       print(area)
-      if area > 20000:
+      if area > 1000:
         self.get_to_sand = False
         self.robot_state = 1
         self.waiting_to_cross = False

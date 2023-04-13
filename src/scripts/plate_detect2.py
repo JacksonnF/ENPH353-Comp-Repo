@@ -501,7 +501,7 @@ def predictLetter(croppedLetter):
     img_aug = np.expand_dims(croppedLetter, axis=0)
     input_data = np.expand_dims(np.array(img_aug, dtype=np.float32), axis=-1)
 
-    interpreter = tf.lite.Interpreter('/home/fizzer/ros_ws/src/controller_pkg/data/let_model_4_quantized.tflite')
+    interpreter = tf.lite.Interpreter('/home/fizzer/ros_ws/src/controller_pkg/data/let_model_4_quantized.tflite') #trying version 8
     interpreter.allocate_tensors()
 
     # Set the input tensor.
