@@ -625,11 +625,6 @@ def callback(data):
             output22 = isolatePlate2_carNumber(queue1Element[1])
             if(type(output2)!=type(None) and type(output22)!=type(None)):
 
-                # filename = "./data/"+str(carNumber)+"-{}-{}.jpg".format(count, session)
-                # cv2.imwrite(filename, output22)
-                # rospy.loginfo("Saved image {}".format(filename))
-                # count = count+1
-
                 queue2.put((output2,output22))
             return
         
@@ -657,29 +652,6 @@ def callback(data):
         license_plate_pub.publish(str('TeamRed,multi12,-1,XR58')) 
         skipIsolation = True
 
-
-def on_press(key):
-    global count
-    global session
-    global carNumber
-    global skipIsolation
-    global plateReadings
-    try:
-        key_num = int(key.char)
-    except (AttributeError, ValueError):
-        return
-
-    # if 7 <= key_num <= 8:
-    #     print('You pressed {}'.format(key_num))
-    #     print(licensePlateList)
-    #     skipIsolation = True
-        
-
-    if 1 <= key_num <= 6:
-        print('You pressed {}'.format(key_num))
-        # Save the image with the specified file name
-        carNumber += 1
-        print("carNumber: ", carNumber)
            
 
 if __name__ == '__main__':
@@ -711,27 +683,11 @@ if __name__ == '__main__':
     image_sub = rospy.Subscriber('/R1/pi_camera/image_raw', Image, callback)
     license_plate_pub = rospy.Publisher('/license_plate', String, 
                                              queue_size=1)
-    licensePlateList = []
 
     letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
     numbers = "0123456789"
     carNumbers = "12345678"
-    # letModel = keras.models.load_model("/home/fizzer/ros_ws/src/controller_pkg/data/let_model_4.h5")
-    # numModel = keras.models.load_model("/home/fizzer/ros_ws/src/controller_pkg/data/num_model_4.2.h5")
-    # carNumModel = keras.models.load_model("/home/fizzer/ros_ws/src/controller_pkg/data/car_num_model_1.h5")
-    # Open the CSV file
-    with open('/home/fizzer/ros_ws/src/2022_competition/enph353/enph353_gazebo/scripts/plates.csv', newline='') as csvfile:
-        # Create a CSV reader object
-        reader = csv.reader(csvfile, delimiter=',', quotechar='"')
-        # Read each row in the CSV file
-        for row in reader:
-            licensePlateList.append(str(row))
-    print(licensePlateList)
-        
-
-    # Setup the key listener
-    listener = keyboard.Listener(on_press=on_press)
-    listener.start()
+    
 
     global current_croppedLetters_individual
     current_croppedLetters_individual = [None,None,None,None]
